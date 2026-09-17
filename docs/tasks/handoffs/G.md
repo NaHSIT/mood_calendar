@@ -4,6 +4,8 @@
 
 所有已形成提交的分支均已合入 `integration/app`：A 核心契约、B 量表、C 健康框架、E 教师平台契约、F AA 随访均在分支历史中；D 分支没有独立于 `develop` 的风险实现提交。全量单元测试和 APK 构建已通过，但测评提交→风险评估→投递→教师干预的真正 UI/事件接线仍需 D/E 的实现交付。
 
+后续检查时 D 风险评估、C 领域健康适配和 F 仓储 UI 适配已推进，均已追加合入；`AppCareServices` 现在作为单一应用组装根创建 A 的 Room 仓储、Keystore 加密、演示健康提供者和 D 风险评估器。
+
 ## 已完成
 
 - 核对 `integration/app` 分支、G 独占目录和基线构建环境。
@@ -36,7 +38,7 @@
 
 - 首次 `gradlew.bat :app:testDebugUnitTest :app:assembleDebug --stacktrace`：Kotlin 源码编译通过；测试 worker 启动失败，报 `ClassNotFoundException: worker.org.gradle.process.internal.worker.GradleWorkerMain`，不计为测试通过。
 - 无 daemon/单 worker 重试：被其他并行 worktree 的 Gradle stop 命令中止，不计为通过。
-- 合入 A–F 后在独立 Gradle 用户目录执行 `gradlew.bat --no-daemon --max-workers=1 :app:testDebugUnitTest :app:assembleDebug`：通过，`BUILD SUCCESSFUL` (2分 21秒)。只有既有弃用警告和 Google Location D8 companion-object 警告。
+- 合入最新 A–F 提交和 `AppCareServices` 后在独立 Gradle 用户目录执行 `gradlew.bat --no-daemon --max-workers=1 :app:testDebugUnitTest :app:assembleDebug`：通过，`BUILD SUCCESSFUL` (1分)。
 - 生成 APK：`app/build/outputs/apk/debug/app-debug.apk`。
 - `:app:lintDebug`：未完成。源码编译阶段通过，但 `generateDebugAndroidTestLintModel` 需下载隔离缓存中缺失的 `androidx.test.ext:junit:1.3.0`，沙箱网络请求被拒绝。
 - 尚无设备/模拟器，未验证 UI 导航、旋转、重启、数据库迁移和权限隔离。
