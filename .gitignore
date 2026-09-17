@@ -1,0 +1,29 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Local IDE/compiler state and independent module worktrees
+/.idea/
+/.kotlin/
+/.worktrees/
+*.jks
+*.keystore
+keystore.properties
+.env
+.env.*
+!.env.example
+
+# Personal reference screenshot; not application source
+/聊天记录.jpg
