@@ -24,8 +24,9 @@
 - `AssessmentScorer.score(type, answers): ScoreResult`
 - `AssessmentScorer.bandFor(type, total): SymptomBand`
 - `AssessmentDraft.empty(type)` / `restore(type, answers)` / `answer(index, value)` / `clear(index)`
+- `ScoreResult.Complete.toAssessmentRecord(...)` maps a validated completed score to A's frozen `AssessmentRecord`.
 
-这些不是公共跨模块契约。A 契约冻结后应在 B 的 ViewModel/适配层映射到 A 的模型，不应要求其他模块依赖上述内部类型。
+`AssessmentType` 和 `SymptomBand` 现在直接别名到 A 冻结的 `domain.model` 类型；B 不再复制一套公共枚举。其余类型仍为 B 内部实现，其他模块不应依赖。
 
 ## 验证
 

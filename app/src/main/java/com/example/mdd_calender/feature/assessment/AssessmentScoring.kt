@@ -4,19 +4,6 @@ package com.example.mdd_calender.feature.assessment
  * Pure assessment scoring. This package deliberately does not mirror the shared domain models:
  * Window A owns those contracts and they have not been frozen yet.
  */
-enum class AssessmentType(val itemCount: Int, val maximumScore: Int) {
-    PHQ_9(itemCount = 9, maximumScore = 27),
-    GAD_7(itemCount = 7, maximumScore = 21),
-}
-
-enum class SymptomBand {
-    MINIMAL,
-    MILD,
-    MODERATE,
-    MODERATELY_SEVERE,
-    SEVERE,
-}
-
 sealed interface ScoreResult {
     data class Incomplete(val missingItemIndices: List<Int>) : ScoreResult
 

@@ -10,6 +10,29 @@ data class QuestionnaireDescriptor(
     val contentNotice: String,
 )
 
+fun ScoreResult.Complete.toAssessmentRecord(
+    assessmentId: String,
+    studentId: String,
+    instrumentVersion: String,
+    answers: List<Int>,
+    completedAtEpochMillis: Long,
+): com.example.mdd_calender.domain.model.AssessmentRecord {
+    require(answers.size == type.itemCount && answers.all { it in 0..3 })
+    require(answers.sum() == total)
+    return com.example.mdd_calender.domain.model.AssessmentRecord(
+        assessmentId = assessmentId,
+        studentId = studentId,
+        type = type,
+        instrumentVersion = instrumentVersion,
+        answers = answers,
+        totalScore = total,
+        symptomBand = symptomBand,
+        state = com.example.mdd_calender.domain.model.AssessmentState.COMPLETED,
+        completedAtEpochMillis = completedAtEpochMillis,
+        scoringVersion = AssessmentScorer.SCORING_VERSION,
+    )
+}
+
 /**
  * The item labels below are intentionally placeholders, not a claimed official Chinese edition.
  * Production wording, age suitability, licensing, and professional review remain external inputs.
