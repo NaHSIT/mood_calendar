@@ -7,7 +7,7 @@ class HealthSyncCoordinator(
     private val consentGateway: HealthConsentGateway,
     private val healthGateway: StudentHealthGateway,
     private val provider: HealthProviderClient,
-    private val extractor: PhysiologySignalExtractor,
+    private val extractor: FeatureSignalExtractor,
     private val consentChangeSink: HealthConsentChangeSink,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
     private val taskIdFactory: () -> String = { UUID.randomUUID().toString() },

@@ -36,7 +36,7 @@ interface HealthProviderClient {
     fun cancel(taskId: String)
 }
 
-fun interface PhysiologySignalExtractor {
+fun interface FeatureSignalExtractor {
     fun extract(
         studentId: String,
         samples: List<HealthSample>,

@@ -14,7 +14,7 @@ data class DemoSignalRules(
 /** Demo-only coarse rules. These thresholds are not clinical claims or a risk diagnosis. */
 class RuleBasedPhysiologySignalExtractor(
     private val rules: DemoSignalRules = DemoSignalRules(),
-) : PhysiologySignalExtractor {
+) : FeatureSignalExtractor, com.example.mdd_calender.domain.port.PhysiologySignalExtractor {
     override fun extract(
         studentId: String,
         samples: List<HealthSample>,
@@ -53,6 +53,62 @@ class RuleBasedPhysiologySignalExtractor(
             signals = signals,
             explanation = if (signals.isEmpty()) "未匹配演示辅助规则" else "匹配到粗粒度演示信号，仅供人工复核参考",
         )
+    }
+
+    override suspend fun extract(
+        samples: List<com.example.mdd_calender.domain.model.RawHealthSample>,
+        consent: com.example.mdd_calender.domain.model.HealthConsent,
+    ): com.example.mdd_calender.domain.model.CareResult<List<com.example.mdd_calender.domain.model.PhysiologySignal>> {
+        val localSamples = samples.mapNotNull { sample ->
+            val metric = when (sample.type) {
+                com.example.mdd_calender.domain.model.HealthSampleType.HEART_RATE_BPM -> HealthMetric.HEART_RATE
+                com.example.mdd_calender.domain.model.HealthSampleType.SLEEP_DURATION_MINUTES -> HealthMetric.SLEEP
+                com.example.mdd_calender.domain.model.HealthSampleType.SLEEP_QUALITY -> null
+            }
+            metric?.let {
+                HealthSample(
+                    ownerId = sample.ownerId,
+                    metric = it,
+                    observedAtEpochMillis = sample.measuredAtEpochMillis,
+                    value = if (sample.type == com.example.mdd_calender.domain.model.HealthSampleType.SLEEP_DURATION_MINUTES) sample.value / 60.0 else sample.value,
+                    unit = sample.unit,
+                    quality = when (sample.quality) {
+                        com.example.mdd_calender.domain.model.SampleQuality.POOR -> 0.25
+                        com.example.mdd_calender.domain.model.SampleQuality.FAIR -> 0.6
+                        com.example.mdd_calender.domain.model.SampleQuality.GOOD -> 0.9
+                    },
+                    domain = if (sample.simulated) HealthDataDomain.DEMO else HealthDataDomain.REAL,
+                )
+            }
+        }
+        val report = extract(
+            studentId = consent.studentId,
+            samples = localSamples,
+            consentRevision = consent.revision,
+            nowEpochMillis = samples.maxOfOrNull { it.measuredAtEpochMillis } ?: 0L,
+        )
+        val signals = report.signals.map { signal ->
+            com.example.mdd_calender.domain.model.PhysiologySignal(
+                signalId = "${signal.studentId}-${signal.pattern}-${signal.windowEndEpochMillis}",
+                studentId = signal.studentId,
+                type = when (signal.pattern) {
+                    PhysiologyPattern.ELEVATED_RESTING_HEART_RATE -> com.example.mdd_calender.domain.model.SignalType.ELEVATED_HEART_RATE
+                    PhysiologyPattern.SHORT_SLEEP_PATTERN -> com.example.mdd_calender.domain.model.SignalType.LOW_SLEEP
+                },
+                windowStartEpochMillis = signal.windowStartEpochMillis,
+                windowEndEpochMillis = signal.windowEndEpochMillis,
+                quality = when {
+                    signal.quality < 0.4 -> com.example.mdd_calender.domain.model.SampleQuality.POOR
+                    signal.quality < 0.75 -> com.example.mdd_calender.domain.model.SampleQuality.FAIR
+                    else -> com.example.mdd_calender.domain.model.SampleQuality.GOOD
+                },
+                validUntilEpochMillis = signal.validUntilEpochMillis,
+                ruleVersion = signal.ruleVersion,
+                consentRevision = signal.consentRevision,
+                simulated = signal.isSimulated,
+            )
+        }
+        return com.example.mdd_calender.domain.model.CareResult.Success(signals)
     }
 
     private fun signal(
