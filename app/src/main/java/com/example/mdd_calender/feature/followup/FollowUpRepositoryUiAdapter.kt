@@ -99,8 +99,9 @@ private fun DomainTask.toUi() = StudentFollowUpTaskUi(
         DomainTaskStatus.OVERDUE -> FollowUpTaskUiStatus.OVERDUE
         DomainTaskStatus.CANCELLED -> FollowUpTaskUiStatus.CANCELLED
     },
-    actionLabel = when (status) {
-        DomainTaskStatus.COMPLETED, DomainTaskStatus.CANCELLED -> null
+    actionLabel = when {
+        type == DomainTaskType.TEACHER_REVIEW -> null
+        status == DomainTaskStatus.COMPLETED || status == DomainTaskStatus.CANCELLED -> null
         else -> "完成任务"
     },
 )

@@ -76,7 +76,7 @@ fun CareHubScreen(
 }
 
 @Composable
-fun AssessmentRoute(services: AppCareServices, onBack: () -> Unit) {
+fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, onBack: () -> Unit) {
     var type by remember { mutableStateOf(AssessmentType.PHQ_9) }
     val answers = remember(type) { mutableStateListOf<Int?>().apply { repeat(type.itemCount) { add(null) } } }
     var message by remember { mutableStateOf<String?>(null) }
@@ -129,7 +129,15 @@ fun AssessmentRoute(services: AppCareServices, onBack: () -> Unit) {
                                 completedAtEpochMillis = System.currentTimeMillis(),
                             )
                             message = when (services.submitAssessmentAndTriggerCare(record)) {
-                                is CareResult.Success -> "已保存并完成评估链；有关注事件时已进入模拟投递。"
+                                is CareResult.Success -> {
+                                    if (followUpTaskId != null) {
+                                        val adapter = FollowUpRepositoryUiAdapter(services.followUp, services.assessments)
+                                        when (adapter.completeAssessmentTask(followUpTaskId, record.assessmentId, System.currentTimeMillis())) {
+                                            is CareResult.Success -> "复测已保存，随访任务已完成。"
+                                            is CareResult.Failure -> "复测已保存，但随访任务更新失败。"
+                                        }
+                                    } else "已保存并完成评估链；有关注事件时已进入模拟投递。"
+                                }
                                 is CareResult.Failure -> "保存失败，请稍后重试。"
                             }
                         }
@@ -145,36 +153,68 @@ fun AssessmentRoute(services: AppCareServices, onBack: () -> Unit) {
 
 @Composable
 fun HealthRoute(services: AppCareServices, onBack: () -> Unit) {
-    var consent by remember {
-        mutableStateOf(HealthConsentSnapshot("demo-student", emptySet(), 0, System.currentTimeMillis(), HealthDataDomain.DEMO))
-    }
+    var consent by remember { mutableStateOf(HealthConsentSnapshot("demo-student", emptySet(), 0, System.currentTimeMillis(), HealthDataDomain.DEMO)) }
     var rawData by remember { mutableStateOf(false) }
+    var rawView by remember { mutableStateOf<RawHealthDataView>(RawHealthDataView.NotConnected) }
+    var busy by remember { mutableStateOf(true) }
+    var status by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        when (val result = services.healthConsentSnapshot()) {
+            is CareResult.Success -> consent = result.value
+            is CareResult.Failure -> status = "授权状态加载失败。"
+        }
+        busy = false
+    }
     if (rawData) {
-        RawHealthDataScreen(RawHealthDataView.NotConnected, onBack = { rawData = false })
+        RawHealthDataScreen(rawView, onBack = { rawData = false })
     } else {
         val capabilities = services.demoHealthProvider.capabilities()
         HealthManagementScreen(
-            state = HealthManagementUiState(consent, capabilities),
+            state = HealthManagementUiState(consent, capabilities, busy, status),
             onBack = onBack,
             onConsentChange = { metric, enabled ->
-                consent = consent.copy(
-                    enabledMetrics = if (enabled) consent.enabledMetrics + metric else consent.enabledMetrics - metric,
-                    revision = consent.revision + 1,
-                    changedAtEpochMillis = System.currentTimeMillis(),
-                )
+                scope.launch {
+                    busy = true
+                    status = null
+                    when (val result = services.updateHealthConsent(metric, enabled)) {
+                        is CareResult.Success -> {
+                            consent = result.value
+                            status = if (enabled) "授权已保存，演示数据已同步。" else "授权已撤回，后续同步已停止。"
+                        }
+                        is CareResult.Failure -> status = "授权更新失败，请重试。"
+                    }
+                    busy = false
+                }
             },
-            onDeleteRawData = { },
-            onOpenRawData = { rawData = true },
+            onDeleteRawData = { status = "当前存储接口不支持删除；未执行删除。" },
+            onOpenRawData = {
+                scope.launch {
+                    rawView = when (val result = services.rawHealthDataView()) {
+                        is CareResult.Success -> result.value
+                        is CareResult.Failure -> RawHealthDataView.AccessDenied
+                    }
+                    rawData = true
+                }
+            },
         )
     }
 }
 
 @Composable
-fun FollowUpRoute(services: AppCareServices, onBack: () -> Unit) {
+fun FollowUpRoute(services: AppCareServices, onAssessmentTask: (String) -> Unit, onBack: () -> Unit) {
     var state by remember { mutableStateOf<com.example.mdd_calender.domain.model.CareResult<com.example.mdd_calender.feature.followup.StudentFollowUpUiState>?>(null) }
     val adapter = remember { FollowUpRepositoryUiAdapter(services.followUp, services.assessments) }
     val scope = rememberCoroutineScope()
-    suspend fun reload() { state = adapter.studentState() }
+    var taskTypes by remember { mutableStateOf<Map<String, com.example.mdd_calender.domain.model.FollowUpTaskType>>(emptyMap()) }
+    suspend fun reload() {
+        services.ensureFollowUpTasks()
+        taskTypes = when (val tasks = services.followUp.currentStudentTasks()) {
+            is CareResult.Success -> tasks.value.associate { it.taskId to it.type }
+            is CareResult.Failure -> emptyMap()
+        }
+        state = adapter.studentState()
+    }
     LaunchedEffect(Unit) { reload() }
     Scaffold(topBar = {
         TopAppBar(
@@ -187,7 +227,11 @@ fun FollowUpRoute(services: AppCareServices, onBack: () -> Unit) {
                 null -> Text("加载中…", Modifier.padding(20.dp))
                 is CareResult.Success -> StudentFollowUpScreen(
                     result.value,
-                    onTaskAction = { taskId -> scope.launch { adapter.completeTask(taskId, System.currentTimeMillis()); reload() } },
+                    onTaskAction = { taskId ->
+                        if (taskTypes[taskId] == com.example.mdd_calender.domain.model.FollowUpTaskType.ASSESSMENT_RETAKE) {
+                            onAssessmentTask(taskId)
+                        } else scope.launch { adapter.completeTask(taskId, System.currentTimeMillis()); reload() }
+                    },
                     onRequestExit = { scope.launch { adapter.requestExit("学生演示退出申请"); reload() } },
                 )
                 is CareResult.Failure -> Text("当前没有可用的随访记录。", Modifier.padding(20.dp))

@@ -121,7 +121,7 @@ fun MainScreen(
             }
             composable("care_hub") {
                 CareHubScreen(
-                    onAssessment = { parentNavController.navigate(Route.ASSESSMENT) },
+                    onAssessment = { parentNavController.navigate(Route.createAssessmentRoute()) },
                     onHealth = { parentNavController.navigate(Route.HEALTH) },
                     onFollowUp = { parentNavController.navigate(Route.FOLLOW_UP) },
                     onTeacher = { parentNavController.navigate(Route.TEACHER) },
