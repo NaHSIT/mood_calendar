@@ -14,8 +14,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,6 +49,7 @@ fun EditorScreen(
     var content by remember { mutableStateOf("") }
     var time by remember { mutableStateOf(java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))) }
     var imageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    val context = LocalContext.current
     
     val selectedRecords by viewModel.selectedDateRecords.collectAsState()
 
@@ -77,7 +79,15 @@ fun EditorScreen(
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(),
         onResult = { uris ->
-            imageUris = imageUris + uris
+            uris.forEach { uri ->
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+            }
+            imageUris = (imageUris + uris).distinct()
         }
     )
 
@@ -114,7 +124,7 @@ fun EditorScreen(
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = weatherColors.textPrimary)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = weatherColors.textPrimary)
                 }
                 
                 Text(
@@ -136,7 +146,7 @@ fun EditorScreen(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Check, contentDescription = "Save", tint = weatherColors.textPrimary)
+                    Icon(Icons.Default.Check, contentDescription = "保存心情记录", tint = weatherColors.textPrimary)
                 }
             }
 
@@ -240,7 +250,7 @@ fun EditorScreen(
                     items(imageUris) { uri ->
                         AsyncImage(
                             model = uri,
-                            contentDescription = null,
+                            contentDescription = "心情记录图片",
                             modifier = Modifier
                                 .size(120.dp)
                                 .clip(RoundedCornerShape(24.dp)),
@@ -262,7 +272,7 @@ fun EditorScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = weatherColors.textPrimary)
+                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = "添加记录图片", tint = weatherColors.textPrimary)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         "添加照片", 
