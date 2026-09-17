@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-集成前置工作部分完成，完整闭环尚不可验收。A 的公共契约及 v3→v4 迁移仍未提交/冻结，B–F 没有可从 `develop` 合入的模块交付；G 不复制其他 worktree 的未提交文件，也不自行定义跨模块契约。
+所有已形成提交的分支均已合入 `integration/app`：A 核心契约、B 量表、C 健康框架、E 教师平台契约、F AA 随访均在分支历史中；D 分支没有独立于 `develop` 的风险实现提交。全量单元测试和 APK 构建已通过，但测评提交→风险评估→投递→教师干预的真正 UI/事件接线仍需 D/E 的实现交付。
 
 ## 已完成
 
@@ -36,7 +36,7 @@
 
 - 首次 `gradlew.bat :app:testDebugUnitTest :app:assembleDebug --stacktrace`：Kotlin 源码编译通过；测试 worker 启动失败，报 `ClassNotFoundException: worker.org.gradle.process.internal.worker.GradleWorkerMain`，不计为测试通过。
 - 无 daemon/单 worker 重试：被其他并行 worktree 的 Gradle stop 命令中止，不计为通过。
-- 独立 Gradle 用户目录执行 `gradlew.bat --no-daemon --max-workers=1 :app:testDebugUnitTest :app:assembleDebug`：通过，`BUILD SUCCESSFUL` (11分 11秒)。只有既有弃用警告和 Google Location D8 companion-object 警告。
+- 合入 A–F 后在独立 Gradle 用户目录执行 `gradlew.bat --no-daemon --max-workers=1 :app:testDebugUnitTest :app:assembleDebug`：通过，`BUILD SUCCESSFUL` (2分 21秒)。只有既有弃用警告和 Google Location D8 companion-object 警告。
 - 生成 APK：`app/build/outputs/apk/debug/app-debug.apk`。
 - `:app:lintDebug`：未完成。源码编译阶段通过，但 `generateDebugAndroidTestLintModel` 需下载隔离缓存中缺失的 `androidx.test.ext:junit:1.3.0`，沙箱网络请求被拒绝。
 - 尚无设备/模拟器，未验证 UI 导航、旋转、重启、数据库迁移和权限隔离。
