@@ -16,7 +16,7 @@ class DemonstrationRiskEvaluator : RiskEvaluator {
             .groupBy { it.type }
             .mapValues { (_, values) -> values.maxBy { it.completedAtEpochMillis } }
             .values
-            .filter { input.generatedAtEpochMillis - it.completedAtEpochMillis <= VALIDITY_WINDOW_MS }
+            .filter { it.completedAtEpochMillis >= assessmentWindowStart(input.generatedAtEpochMillis) }
 
         val phq = valid.firstOrNull { it.type == AssessmentType.PHQ_9 }
         val gad = valid.firstOrNull { it.type == AssessmentType.GAD_7 }
@@ -76,7 +76,15 @@ class DemonstrationRiskEvaluator : RiskEvaluator {
     }
     private fun rank(level: ConcernLevel) = when (level) { ConcernLevel.LOW -> 0; ConcernLevel.MILD -> 1; ConcernLevel.MODERATE -> 2; ConcernLevel.HIGH -> 3; ConcernLevel.INSUFFICIENT_DATA -> -1 }
 
-    companion object { const val RULE_VERSION = "demo-risk-1"; const val SAFETY_REVIEW_REQUIRED = "SAFETY_REVIEW_REQUIRED"; private const val VALIDITY_WINDOW_MS = 14L * 24 * 60 * 60 * 1000 }
+    companion object {
+        const val RULE_VERSION = "demo-risk-1"
+        const val SAFETY_REVIEW_REQUIRED = "SAFETY_REVIEW_REQUIRED"
+        const val ASSESSMENT_VALIDITY_WINDOW_MS = 14L * 24 * 60 * 60 * 1000
+
+        /** Earliest completion time that should be loaded for an evaluation at [generatedAtEpochMillis]. */
+        fun assessmentWindowStart(generatedAtEpochMillis: Long): Long =
+            (generatedAtEpochMillis - ASSESSMENT_VALIDITY_WINDOW_MS).coerceAtLeast(0L)
+    }
 }
 
 object AlertEventFactory {

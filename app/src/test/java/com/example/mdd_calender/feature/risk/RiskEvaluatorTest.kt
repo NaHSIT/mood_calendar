@@ -19,6 +19,24 @@ class RiskEvaluatorTest {
         assertEquals(EvaluationDataSufficiency.COMPLETE, result.dataSufficiency)
     }
 
+    @Test fun `query window starts fourteen days before evaluation`() {
+        assertEquals(
+            now - 14L * 24 * 60 * 60 * 1000,
+            DemonstrationRiskEvaluator.assessmentWindowStart(now),
+        )
+        assertEquals(0L, DemonstrationRiskEvaluator.assessmentWindowStart(1L))
+    }
+
+    @Test fun `older valid scale is retained when latest scale is submitted`() = runBlocking {
+        val earlierPhq = assessment("p", AssessmentType.PHQ_9, 16, at = now - 7L * 24 * 60 * 60 * 1000)
+        val latestGad = assessment("g", AssessmentType.GAD_7, 2, at = now)
+        val result = (evaluator.evaluate(input(earlierPhq, latestGad)) as CareResult.Success).value
+
+        assertEquals(ConcernLevel.HIGH, result.baseConcernLevel)
+        assertEquals(listOf("g", "p"), result.assessmentIds)
+        assertEquals(EvaluationDataSufficiency.COMPLETE, result.dataSufficiency)
+    }
+
     @Test fun `expired scales produce insufficient data`() = runBlocking {
         val result = (evaluator.evaluate(input(assessment("p", AssessmentType.PHQ_9, 20, at = now - 15L * 24 * 60 * 60 * 1000))) as CareResult.Success).value
         assertEquals(ConcernLevel.INSUFFICIENT_DATA, result.baseConcernLevel)
