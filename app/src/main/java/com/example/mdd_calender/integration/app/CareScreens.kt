@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -175,7 +176,12 @@ fun FollowUpRoute(services: AppCareServices, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     suspend fun reload() { state = adapter.studentState() }
     LaunchedEffect(Unit) { reload() }
-    Scaffold(topBar = { TopAppBar(title = { Text("我的 AA 随访") }) }) { padding ->
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("我的 AA 随访") },
+            navigationIcon = { TextButton(onClick = onBack) { Text("返回") } },
+        )
+    }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             when (val result = state) {
                 null -> Text("加载中…", Modifier.padding(20.dp))
@@ -186,7 +192,6 @@ fun FollowUpRoute(services: AppCareServices, onBack: () -> Unit) {
                 )
                 is CareResult.Failure -> Text("当前没有可用的随访记录。", Modifier.padding(20.dp))
             }
-            OutlinedButton(onClick = onBack, Modifier.padding(20.dp).fillMaxWidth()) { Text("返回") }
         }
     }
 }
@@ -201,8 +206,14 @@ fun TeacherRoute(services: AppCareServices, onBack: () -> Unit) {
                 TeacherWorkbenchViewModel(services.teacherService) as T
         },
     )
-    Column(Modifier.fillMaxSize()) {
-        TeacherWorkbenchRoute(vm)
-        OutlinedButton(onClick = onBack, Modifier.padding(16.dp).fillMaxWidth()) { Text("返回") }
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("教师预警工作台") },
+            navigationIcon = { TextButton(onClick = onBack) { Text("返回") } },
+        )
+    }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            TeacherWorkbenchRoute(vm)
+        }
     }
 }
