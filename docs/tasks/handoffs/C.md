@@ -61,13 +61,13 @@
 
 ## 未完成项
 
-- A 的冻结公共契约和存储实现尚未出现在 `develop` 或 `feat/core-privacy`，因此当前使用 C 专属网关隔离依赖，未冒充最终公共接口。
+- A 的冻结公共契约已合入当前分支；`DomainHealthDataProviderAdapter` 和 `RuleBasedPhysiologySignalExtractor` 已对接 `domain.port.HealthDataProvider` / `PhysiologySignalExtractor`。Room 授权/原始样本事务适配仍由 G/A 注入，C 专属网关保留为可测试的同步编排边界。
 - 未做 Room/加密持久化、应用导航接线、启动恢复或真实设备接入；这些分别属于 A/G 或明确排除范围。
-- 测试已编译但受本机 Gradle test worker 故障影响未实际运行。
+- 测试已编译但受本机 Gradle test worker `GradleWorkerMain` 类加载故障影响未实际运行。
 
 ## 集成步骤
 
-1. A 契约合入后，由 G/A 为 `HealthConsentGateway`、`StudentHealthGateway` 写薄适配器；`persistIfConsentCurrent` 必须在事务中核对授权修订号后再保存原始样本和信号。
+1. 由 G/A 为 `HealthConsentGateway`、`StudentHealthGateway` 写薄适配器；`persistIfConsentCurrent` 必须在事务中核对授权修订号后再保存原始样本和信号。
 2. `HealthConsentChangeSink` 接到 D/G：撤回后清除待发健康辅助内容并重新计算摘要，但不得删除量表本身触发的预警。
 3. G 将两个页面接入现有导航并提供可信学生身份；教师导航不得暴露 `RawHealthDataScreen`。
 4. 使用 A 的加密演示存储验证进程重启后授权仍关闭，再运行全量测试。
