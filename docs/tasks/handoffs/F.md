@@ -65,6 +65,7 @@
 - `app/src/main/java/com/example/mdd_calender/feature/followup/FollowUpPorts.kt`
 - `app/src/main/java/com/example/mdd_calender/feature/followup/FollowUpSchedule.kt`
 - `app/src/main/java/com/example/mdd_calender/feature/followup/FollowUpService.kt`
+- `app/src/main/java/com/example/mdd_calender/feature/followup/FollowUpRepositoryUiAdapter.kt`
 - `app/src/main/java/com/example/mdd_calender/feature/followup/FollowUpComponents.kt`
 - `app/src/main/java/com/example/mdd_calender/feature/followup/FollowUpPolicy.kt`、`FollowUpScreens.kt`、`FollowUpUiModels.kt`（同窗口已有实现，保留）
 - `app/src/test/java/com/example/mdd_calender/feature/followup/FollowUpServiceTest.kt`
@@ -79,11 +80,13 @@
 `requestExit(student, enrollmentId, rationale)` / `reviewExit(teacher, enrollmentId, approve)`：申请与人工审核分离。
 `transferResponsibility(...)`、`setPaused(...)`：责任归属与暂停/恢复。
 `StudentFollowUpPanel`、`TeacherFollowUpCard` 以及已有 `StudentFollowUpScreen`、`TeacherFollowUpScreen` 为 UI 组件签名。
+`FollowUpRepositoryUiAdapter` 将 A 的 `FollowUpRepository`、B 的 `AssessmentRepository` 映射到 F UI，复测只接受已完成且属于当前学生的测评。
 
 ## 验证命令和结果
 
 - `git status --short --branch`：分支为 `feat/aa-followup`，开始工作前干净。
 - `compileDebugKotlin`、`compileDebugUnitTestKotlin` 已通过。
+- 已合入本地最新 `develop`（`e9deed5`，A 公共契约与数据库冻结）。
 - 标准 `testDebugUnitTest` 的 Gradle worker 在本机报 `GradleWorkerMain` 类加载错误；使用同一 runtime classpath 的直接 JUnitCore 执行通过：`OK (14 tests)`。
 
 ## 未完成项
