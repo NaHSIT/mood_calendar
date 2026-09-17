@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -17,24 +18,29 @@ import androidx.navigation.compose.rememberNavController
 import androidx.compose.ui.unit.dp
 import com.example.mdd_calender.ui.MoodViewModel
 import com.example.mdd_calender.ui.navigation.Route
+import com.example.mdd_calender.integration.app.AppCareServices
+import com.example.mdd_calender.integration.app.CareHubScreen
 
 sealed class BottomNavItem(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     object Home : BottomNavItem(Route.HOME, "首页", Icons.Default.Home)
     object Calendar : BottomNavItem(Route.CALENDAR, "日历", Icons.Default.DateRange)
     object Analysis : BottomNavItem(Route.ANALYSIS, "分析", Icons.Default.Info)
+    object Care : BottomNavItem("care_hub", "照护", Icons.Default.Favorite)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     parentNavController: NavHostController,
-    viewModel: MoodViewModel
+    viewModel: MoodViewModel,
+    careServices: AppCareServices? = null,
 ) {
     val bottomNavController = rememberNavController()
     val items = listOf(
         BottomNavItem.Home,
         BottomNavItem.Calendar,
-        BottomNavItem.Analysis
+        BottomNavItem.Analysis,
+        BottomNavItem.Care
     )
 
     Scaffold(
@@ -111,6 +117,14 @@ fun MainScreen(
                 AnalysisScreen(
                     viewModel = viewModel,
                     onBack = { /* Handled by bottom nav */ }
+                )
+            }
+            composable("care_hub") {
+                CareHubScreen(
+                    onAssessment = { parentNavController.navigate(Route.ASSESSMENT) },
+                    onHealth = { parentNavController.navigate(Route.HEALTH) },
+                    onFollowUp = { parentNavController.navigate(Route.FOLLOW_UP) },
+                    onTeacher = { parentNavController.navigate(Route.TEACHER) },
                 )
             }
         }

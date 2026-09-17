@@ -15,6 +15,10 @@
 - 图片选择后尝试持久化 URI 读权限，去重并补充编辑页无障碍描述。
 - Auto Backup 与 device transfer 均排除数据库和 shared preferences，避免敏感摘要、会话信息或无法随 Android Keystore 恢复的密文被导出。
 - G 使用独立 `.gradle-g-integration/` 缓存，避免其他并行 worktree 执行 `gradle --stop` 中止验证。
+- 重新合入 B–F 最新分支头，包含 E 的教师工作台与模拟投递实现。
+- 新增底部“照护”入口，接入量表、健康授权、学生 AA 随访和教师预警工作台导航。
+- 量表提交已接通：持久化→D 风险评估→评估/预警入库→建立教师责任关系和干预案例→E 模拟投递回执入库。
+- 教师工作台可确认预警并启动干预，`RoomInterventionRepository.startWithAa` 保证干预和 AA 入库的事务一致性；学生随访页通过 F 的适配器读取和操作任务/退出申请。
 
 ## 修改文件
 
@@ -23,6 +27,10 @@
 - `app/src/main/java/com/example/mdd_calender/ui/MoodViewModel.kt`
 - `app/src/main/java/com/example/mdd_calender/ui/screens/AnalysisScreen.kt`
 - `app/src/main/java/com/example/mdd_calender/ui/screens/EditorScreen.kt`
+- `app/src/main/java/com/example/mdd_calender/integration/app/AppCareServices.kt`
+- `app/src/main/java/com/example/mdd_calender/integration/app/CareScreens.kt`
+- `app/src/main/java/com/example/mdd_calender/ui/navigation/AppNavigation.kt`
+- `app/src/main/java/com/example/mdd_calender/ui/screens/MainScreen.kt`
 - `app/src/main/res/xml/backup_rules.xml`
 - `app/src/main/res/xml/data_extraction_rules.xml`
 - `app/src/test/java/com/example/mdd_calender/ui/MoodViewModelIntegrationTest.kt`
@@ -39,6 +47,7 @@
 - 首次 `gradlew.bat :app:testDebugUnitTest :app:assembleDebug --stacktrace`：Kotlin 源码编译通过；测试 worker 启动失败，报 `ClassNotFoundException: worker.org.gradle.process.internal.worker.GradleWorkerMain`，不计为测试通过。
 - 无 daemon/单 worker 重试：被其他并行 worktree 的 Gradle stop 命令中止，不计为通过。
 - 合入最新 A–F 提交和 `AppCareServices` 后在独立 Gradle 用户目录执行 `gradlew.bat --no-daemon --max-workers=1 :app:testDebugUnitTest :app:assembleDebug`：通过，`BUILD SUCCESSFUL` (1分)。
+- 重新合入 B–F、完成页面和事件链后执行同一命令：通过，`BUILD SUCCESSFUL` (1分 11秒)。
 - 生成 APK：`app/build/outputs/apk/debug/app-debug.apk`。
 - `:app:lintDebug`：未完成。源码编译阶段通过，但 `generateDebugAndroidTestLintModel` 需下载隔离缓存中缺失的 `androidx.test.ext:junit:1.3.0`，沙箱网络请求被拒绝。
 - 尚无设备/模拟器，未验证 UI 导航、旋转、重启、数据库迁移和权限隔离。
