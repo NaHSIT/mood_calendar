@@ -13,6 +13,7 @@ import com.example.mdd_calender.ui.screens.EditorScreen
 import com.example.mdd_calender.ui.screens.HomeScreen
 import com.example.mdd_calender.ui.screens.SettingsScreen
 import com.example.mdd_calender.ui.MoodViewModel
+import com.example.mdd_calender.integration.app.AppCareServices
 
 object Route {
     const val MAIN = "main"
@@ -32,7 +33,8 @@ object Route {
 fun AppNavigation(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
-    viewModel: MoodViewModel
+    viewModel: MoodViewModel,
+    careServices: AppCareServices? = null,
 ) {
     NavHost(
         navController = navController,

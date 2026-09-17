@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mdd_calender.data.MoodDatabase
 import com.example.mdd_calender.data.MoodRepository
+import com.example.mdd_calender.integration.app.AppCareServices
 import com.example.mdd_calender.ui.MoodViewModel
 import com.example.mdd_calender.ui.navigation.AppNavigation
 import com.example.mdd_calender.ui.theme.Mdd_calenderTheme
@@ -29,6 +30,7 @@ class MainActivity : ComponentActivity() {
         val db = MoodDatabase.getDatabase(applicationContext)
         val repository = MoodRepository(db.moodDao(), db.anniversaryDao())
         val preferences = com.example.mdd_calender.data.MoodPreferences(applicationContext)
+        val careServices = AppCareServices(applicationContext)
         
         setContent {
             Mdd_calenderTheme {
@@ -40,7 +42,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation(viewModel = viewModel)
+                    AppNavigation(viewModel = viewModel, careServices = careServices)
                 }
             }
         }
