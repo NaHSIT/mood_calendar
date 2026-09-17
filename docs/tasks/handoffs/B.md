@@ -9,7 +9,7 @@
 - 纯 Kotlin PHQ-9 / GAD-7 计分、完整性校验和症状分段。
 - PHQ-9 第 9 题非零只输出人工安全复核标志，不自动诊断或判定紧急危险。
 - 不可变草稿模型：作答、清除、进度、恢复与损坏草稿拒绝。
-- 量表版本、来源、两周回顾窗口和审核状态的模块内描述。
+- PHQ-9 / GAD-7 简体中文完整题文、0–3 频率选项、版本、来源及两周回顾窗口。
 - 全部分段临界值、漏题、非法值、最大分、草稿恢复及安全标志的单元测试。
 
 ## 修改文件
@@ -18,6 +18,7 @@
 - `feature/assessment/AssessmentDraft.kt`
 - `feature/assessment/QuestionnaireCatalog.kt`
 - 对应 `AssessmentScoringTest.kt`、`AssessmentDraftTest.kt`
+- `QuestionnaireCatalogTest.kt`
 
 ## 模块内签名
 
@@ -39,7 +40,7 @@
 - 保存完整记录、本人历史隔离、重复提交幂等、提交失败恢复：等待 A 的 `AssessmentRepository`、失败类型、会话和持久化签名。
 - 测评入口、逐题页、结果页、历史趋势及专属 ViewModel：应以冻结仓储签名实现，避免临时接口造成返工。
 - `followUpTaskId` 与成功保存后的 `assessmentId` 回调：等待 A/F 公共模型，最终由 G 接线。
-- 正式中文题文：当前仅有明确占位符。中文版本来源、授权、年龄适用性和专业审核未确认，不能标成正式标准版。
+- 正式部署审核：题文已按注明来源的简体中文表单完整录入，可完成原型自评；目标年龄、学校处置流程及 PHQ-9 转载授权仍需在生产部署前确认。
 - 导航注册、Gradle、数据库和旧 `MoodViewModel`：均不属于 B 的修改范围。
 
 ## 依赖请求与后续集成
