@@ -100,16 +100,16 @@ fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, o
                 Text(descriptor.recallPeriod, style = MaterialTheme.typography.bodySmall)
                 Text(descriptor.contentNotice, style = MaterialTheme.typography.bodySmall)
             }
-            itemsIndexed(descriptor.itemPlaceholders) { index, question ->
+            itemsIndexed(descriptor.items) { index, question ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(question)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            descriptor.responseOptions.forEachIndexed { value, label ->
+                            descriptor.responseOptions.forEach { option ->
                                 FilterChip(
-                                    selected = answers[index] == value,
-                                    onClick = { answers[index] = value },
-                                    label = { Text("$value $label") },
+                                    selected = answers[index] == option.score,
+                                    onClick = { answers[index] = option.score },
+                                    label = { Text("${option.score} ${option.label}") },
                                 )
                             }
                         }
