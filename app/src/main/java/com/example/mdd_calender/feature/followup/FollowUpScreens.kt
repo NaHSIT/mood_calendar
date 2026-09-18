@@ -16,9 +16,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -88,6 +93,7 @@ private fun StudentTaskCard(task: StudentFollowUpTaskUi, onAction: () -> Unit) {
 fun TeacherFollowUpScreen(
     state: TeacherFollowUpUiState,
     onOpenEnrollment: (enrollmentId: String) -> Unit,
+    onReviewExit: (enrollmentId: String, approve: Boolean, note: String) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -102,21 +108,57 @@ fun TeacherFollowUpScreen(
             item { Text("当前没有负责的 AA 随访", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             items(state.enrollments, key = { it.enrollmentId }) { item ->
-                Card(
-                    onClick = { onOpenEnrollment(item.enrollmentId) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                ) {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text(item.studentCode, fontWeight = FontWeight.Bold)
                         Text("AA 状态：${item.aaStatusLabel}")
                         Text("任务完成度：${item.completionLabel}")
                         Text("待联系：${item.pendingContactCount}")
+                        OutlinedButton(
+                            onClick = { onOpenEnrollment(item.enrollmentId) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("查看随访详情") }
+                        if (item.exitReviewPending) {
+                            ExitReviewActions(item = item, onReviewExit = onReviewExit)
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ExitReviewActions(
+    item: TeacherEnrollmentSummaryUi,
+    onReviewExit: (enrollmentId: String, approve: Boolean, note: String) -> Unit,
+) {
+    var note by rememberSaveable(item.enrollmentId) { mutableStateOf("") }
+    Text("学生退出申请", fontWeight = FontWeight.SemiBold)
+    Text("申请理由：${item.exitReason?.takeIf(String::isNotBlank) ?: "未填写"}")
+    OutlinedTextField(
+        value = note,
+        onValueChange = { note = it },
+        label = { Text("审核依据（必填）") },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = { onReviewExit(item.enrollmentId, false, note.trim()) },
+            enabled = note.isNotBlank(),
+            modifier = Modifier.weight(1f),
+        ) { Text("拒绝退出") }
+        Button(
+            onClick = { onReviewExit(item.enrollmentId, true, note.trim()) },
+            enabled = note.isNotBlank(),
+            modifier = Modifier.weight(1f),
+        ) { Text("批准退出") }
+    }
+    Text(
+        "批准前仍需校验稳定观察条件及未处理安全关注；批准后由仓储取消未来任务。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -142,4 +184,3 @@ private fun StatusPill(status: FollowUpTaskUiStatus) {
     }
     Text(label, color = color, style = MaterialTheme.typography.labelMedium)
 }
-

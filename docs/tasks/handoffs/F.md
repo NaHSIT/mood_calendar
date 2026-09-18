@@ -11,6 +11,7 @@
 - 核对 00、06、08 的业务边界和验收项。
 - 完成状态机、幂等、权限与恢复场景实现。
 - 完成学生任务/教师白名单视图、演示策略、可注入时钟与恢复调度。
+- 教师列表对待退出审核档案展示申请理由、审核依据输入以及批准/拒绝入口。
 - 测评回调必须由 `AssessmentEvidenceVerifier` 验证“已成功持久化”，不接受伪造 assessmentId。
 - 退出申请只允许学生本人发起；稳定观察起点由仓储可信数据提供，责任教师独立审核。
 
@@ -69,6 +70,7 @@
 - `app/src/main/java/com/example/mdd_calender/feature/followup/FollowUpComponents.kt`
 - `app/src/main/java/com/example/mdd_calender/feature/followup/FollowUpPolicy.kt`、`FollowUpScreens.kt`、`FollowUpUiModels.kt`（同窗口已有实现，保留）
 - `app/src/test/java/com/example/mdd_calender/feature/followup/FollowUpServiceTest.kt`
+- `app/src/test/java/com/example/mdd_calender/feature/followup/FollowUpRepositoryUiAdapterTest.kt`
 - `app/src/test/java/com/example/mdd_calender/feature/followup/FollowUpPolicyTest.kt`
 
 ## 公开接口/页面签名
@@ -81,6 +83,7 @@
 `transferResponsibility(...)`、`setPaused(...)`：责任归属与暂停/恢复。
 `StudentFollowUpPanel`、`TeacherFollowUpCard` 以及已有 `StudentFollowUpScreen`、`TeacherFollowUpScreen` 为 UI 组件签名。
 `FollowUpRepositoryUiAdapter` 将 A 的 `FollowUpRepository`、B 的 `AssessmentRepository` 映射到 F UI，复测只接受已完成且属于当前学生的测评。
+`TeacherFollowUpScreen(..., onReviewExit)` 仅在 `EXIT_REVIEW_PENDING` 时显示审核区，审核依据必填。
 
 ## 验证命令和结果
 
@@ -88,6 +91,7 @@
 - `compileDebugKotlin`、`compileDebugUnitTestKotlin` 已通过。
 - 已合入本地最新 `develop`（`e9deed5`，A 公共契约与数据库冻结）。
 - 标准 `testDebugUnitTest` 的 Gradle worker 在本机报 `GradleWorkerMain` 类加载错误；使用同一 runtime classpath 的直接 JUnitCore 执行通过：`OK (14 tests)`。
+- 教师退出审核入口专项测试通过：`OK (3 tests)`；主代码与测试源码重新编译通过。
 
 ## 未完成项
 

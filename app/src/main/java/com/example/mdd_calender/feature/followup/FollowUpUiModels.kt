@@ -24,10 +24,11 @@ data class TeacherEnrollmentSummaryUi(
     val aaStatusLabel: String,
     val completionLabel: String,
     val pendingContactCount: Int,
+    val exitReviewPending: Boolean = false,
+    val exitReason: String? = null,
 )
 
 data class TeacherFollowUpUiState(
     val enrollments: List<TeacherEnrollmentSummaryUi>,
     val policyDisclosure: String,
 )
-

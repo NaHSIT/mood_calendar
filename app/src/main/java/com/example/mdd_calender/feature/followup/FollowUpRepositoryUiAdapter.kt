@@ -67,16 +67,39 @@ class FollowUpRepositoryUiAdapter(
     suspend fun requestExit(reason: String): CareResult<com.example.mdd_calender.domain.model.AaEnrollment> =
         followUpRepository.requestExit(reason)
 
+    suspend fun teacherState(): CareResult<TeacherFollowUpUiState> =
+        when (val result = followUpRepository.listAssignedEnrollments()) {
+            is CareResult.Failure -> result
+            is CareResult.Success -> CareResult.Success(
+                TeacherFollowUpUiState(
+                    enrollments = result.value.map { enrollment ->
+                        TeacherEnrollmentSummaryUi(
+                            enrollmentId = enrollment.enrollmentId,
+                            studentCode = enrollment.studentId,
+                            aaStatusLabel = enrollment.status.studentLabel(),
+                            completionLabel = "进入详情查看",
+                            pendingContactCount = 0,
+                            exitReviewPending = enrollment.status == DomainAaStatus.EXIT_REVIEW_PENDING,
+                            exitReason = enrollment.exitReview?.reason,
+                        )
+                    },
+                    policyDisclosure = "演示随访周期，未经专业审核；AA 为业务跟踪状态，不是诊断。",
+                ),
+            )
+        }
+
     suspend fun reviewExit(
         enrollmentId: String,
         approve: Boolean,
         note: String,
-    ): CareResult<com.example.mdd_calender.domain.model.AaEnrollment> =
-        followUpRepository.reviewExit(
+    ): CareResult<com.example.mdd_calender.domain.model.AaEnrollment> {
+        if (note.isBlank()) return CareResult.Failure(CareFailure.InvalidInput("Exit review note is required"))
+        return followUpRepository.reviewExit(
             enrollmentId,
             if (approve) ExitReviewDecision.APPROVED else ExitReviewDecision.REJECTED,
-            note,
+            note.trim(),
         )
+    }
 }
 
 private fun DomainAaStatus.studentLabel() = when (this) {
@@ -105,4 +128,3 @@ private fun DomainTask.toUi() = StudentFollowUpTaskUi(
         else -> "完成任务"
     },
 )
-
