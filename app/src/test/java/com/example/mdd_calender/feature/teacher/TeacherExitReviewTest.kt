@@ -71,6 +71,7 @@ class TeacherExitReviewTest {
         override suspend fun saveInternal(event: AlertEvent): CareResult<AlertEvent> = error("unused")
         override suspend fun listTeacherSummaries(): CareResult<List<TeacherAlertSummary>> = error("unused")
         override suspend fun getTeacherSummary(eventId: String): CareResult<TeacherAlertSummary> = error("unused")
+        override suspend fun updateTeacherDisposition(eventId: String, disposition: com.example.mdd_calender.domain.model.AlertDisposition): CareResult<TeacherAlertSummary> = error("unused")
         override suspend fun saveDeliveryInternal(delivery: DeliveryRecord): CareResult<DeliveryRecord> = error("unused")
         override suspend fun getDeliveryInternal(idempotencyKey: String): CareResult<DeliveryRecord> = error("unused")
     }

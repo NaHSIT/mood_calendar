@@ -87,6 +87,7 @@ class AppCareServices(context: Context) {
     val teacherService = TeacherWorkbenchService(
         alerts = RoomAlertRepository(database.careDao(), teacherSession, cipher),
         interventions = RoomInterventionRepository(database, teacherSession, cipher),
+        followUps = RoomFollowUpRepository(database.careDao(), teacherSession, cipher),
         gateway = schoolGateway,
         session = teacherSession,
         audit = RoomAuditRepository(database.careDao(), teacherSession),
