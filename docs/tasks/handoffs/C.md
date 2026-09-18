@@ -57,6 +57,7 @@
 - `:app:compileDebugKotlin`：通过。
 - `:app:compileDebugUnitTestKotlin`：通过。
 - `:app:testDebugUnitTest`：未能执行测试方法。本机 Gradle 9.3.1 在启动测试进程时报告 `ClassNotFoundException: worker.org.gradle.process.internal.worker.GradleWorkerMain`；单 worker、无 daemon 复验仍相同。不得记为测试通过。
+- `:app:lintDebug`：C 的 `feature/health` 已无 Lint 报错；全项目仍因旧页面 74 个 `NewApi` 错误失败，首个位置为 `AnalysisScreen.kt:105`，不属于 C 目录。
 - 编译时另有既存 Android SDK XML 版本提示和旧代码弃用警告，本模块未新增对应警告。
 
 ## 未完成项

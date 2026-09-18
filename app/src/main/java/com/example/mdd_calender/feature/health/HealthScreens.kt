@@ -39,9 +39,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.intl.Locale as ComposeLocale
 import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale as JavaLocale
 
 data class HealthManagementUiState(
     val consent: HealthConsentSnapshot,
@@ -262,8 +264,9 @@ private fun HealthSampleBars(samples: List<HealthSample>) {
 
 @Composable
 private fun SampleRow(sample: HealthSample) {
-    val locale = LocalConfiguration.current.locales[0]
-    val date = SimpleDateFormat("MM-dd HH:mm", locale).format(Date(sample.observedAtEpochMillis))
+    val observableLocale = ComposeLocale.current
+    val javaLocale = JavaLocale.forLanguageTag(observableLocale.toLanguageTag())
+    val date = SimpleDateFormat("MM-dd HH:mm", javaLocale).format(Date(sample.observedAtEpochMillis))
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {

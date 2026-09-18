@@ -1,5 +1,14 @@
 package com.example.mdd_calender.feature.health
 
+import com.example.mdd_calender.domain.model.CareResult
+import com.example.mdd_calender.domain.model.ConsentState
+import com.example.mdd_calender.domain.model.HealthConsent
+import com.example.mdd_calender.domain.model.HealthSampleType
+import com.example.mdd_calender.domain.model.RawHealthSample
+import com.example.mdd_calender.domain.model.SampleQuality
+import com.example.mdd_calender.domain.model.SignalType
+import com.example.mdd_calender.domain.port.PhysiologySignalExtractor
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -56,6 +65,41 @@ class RuleBasedPhysiologySignalExtractorTest {
 
         assertEquals(ExtractionStatus.NO_DATA, missing.status)
         assertEquals(ExtractionStatus.NO_PATTERN, normal.status)
+    }
+
+    @Test
+    fun frozenDomainExtractorContractReturnsAuxiliarySignal() = runBlocking {
+        val domainExtractor: PhysiologySignalExtractor = extractor
+        val samples = List(3) { index ->
+            RawHealthSample(
+                sampleId = "sample-$index",
+                ownerId = "demo-student",
+                source = "demo-health-provider",
+                type = HealthSampleType.HEART_RATE_BPM,
+                measuredAtEpochMillis = now - index * 1_000L,
+                value = 106.0 + index,
+                unit = "bpm",
+                quality = SampleQuality.GOOD,
+                simulated = true,
+                consentRevision = 7,
+            )
+        }
+        val consent = HealthConsent(
+            studentId = "demo-student",
+            scopes = setOf(com.example.mdd_calender.domain.model.HealthScope.HEART_RATE),
+            state = ConsentState.GRANTED,
+            revision = 7,
+            changedAtEpochMillis = now,
+        )
+
+        val result = domainExtractor.extract(samples, consent)
+
+        assertTrue(result is CareResult.Success)
+        val signals = (result as CareResult.Success).value
+        assertEquals(1, signals.size)
+        assertEquals(SignalType.ELEVATED_HEART_RATE, signals.single().type)
+        assertEquals(7, signals.single().consentRevision)
+        assertTrue(signals.single().simulated)
     }
 
     private fun sample(
