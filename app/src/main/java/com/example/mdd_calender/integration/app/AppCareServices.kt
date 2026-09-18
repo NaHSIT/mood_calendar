@@ -102,7 +102,11 @@ class AppCareServices(context: Context) {
             is CareResult.Failure -> return saved
             is CareResult.Success -> Unit
         }
-        val completed = when (val result = systemAssessments.completedForEvaluation(record.studentId, record.completedAtEpochMillis ?: 0L)) {
+        val evaluationAt = System.currentTimeMillis()
+        val completed = when (val result = systemAssessments.completedForEvaluation(
+            record.studentId,
+            DemonstrationRiskEvaluator.assessmentWindowStart(evaluationAt),
+        )) {
             is CareResult.Failure -> return result
             is CareResult.Success -> result.value
         }
@@ -112,7 +116,7 @@ class AppCareServices(context: Context) {
                 assessments = completed,
                 auxiliarySignals = emptyList(),
                 policyVersion = DemonstrationRiskEvaluator.RULE_VERSION,
-                generatedAtEpochMillis = System.currentTimeMillis(),
+                generatedAtEpochMillis = evaluationAt,
             ),
         )) {
             is CareResult.Failure -> return result
