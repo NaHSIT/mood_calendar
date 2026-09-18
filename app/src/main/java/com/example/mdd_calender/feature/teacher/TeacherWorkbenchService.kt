@@ -1,14 +1,18 @@
 package com.example.mdd_calender.feature.teacher
 
 import com.example.mdd_calender.domain.model.AlertDisposition
+import com.example.mdd_calender.domain.model.AaEnrollment
+import com.example.mdd_calender.domain.model.AaStatus
 import com.example.mdd_calender.domain.model.CareFailure
 import com.example.mdd_calender.domain.model.CareResult
+import com.example.mdd_calender.domain.model.ExitReviewDecision
 import com.example.mdd_calender.domain.model.InterventionCase
 import com.example.mdd_calender.domain.model.InterventionStartRequest
 import com.example.mdd_calender.domain.model.InterventionStatus
 import com.example.mdd_calender.domain.model.TeacherAlertSummary
 import com.example.mdd_calender.domain.port.AlertRepository
 import com.example.mdd_calender.domain.port.AuditRepository
+import com.example.mdd_calender.domain.port.FollowUpRepository
 import com.example.mdd_calender.domain.port.InterventionRepository
 import com.example.mdd_calender.domain.port.SchoolAlertDto
 import com.example.mdd_calender.domain.port.SchoolPlatformGateway
@@ -25,14 +29,39 @@ data class TeacherAlertDetails(
     val delivery: com.example.mdd_calender.domain.model.DeliveryRecord? = null,
 )
 
+data class TeacherExitReviewItem(
+    val enrollmentId: String,
+    val requestedAtEpochMillis: Long,
+    val reason: String,
+)
+
 class TeacherWorkbenchService(
     private val alerts: AlertRepository,
     private val interventions: InterventionRepository,
+    private val followUps: FollowUpRepository,
     private val gateway: SchoolPlatformGateway,
     private val session: SessionProvider,
     private val audit: AuditRepository? = null,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
+    suspend fun loadPendingExitReviews(): CareResult<List<TeacherExitReviewItem>> =
+        when (val result = followUps.listAssignedEnrollments()) {
+            is CareResult.Failure -> result
+            is CareResult.Success -> CareResult.Success(
+                result.value
+                    .filter { it.status == AaStatus.EXIT_REVIEW_PENDING && it.exitReview != null }
+                    .map { enrollment ->
+                        val review = requireNotNull(enrollment.exitReview)
+                        TeacherExitReviewItem(
+                            enrollmentId = enrollment.enrollmentId,
+                            requestedAtEpochMillis = review.requestedAtEpochMillis,
+                            reason = review.reason,
+                        )
+                    }
+                    .sortedBy { it.requestedAtEpochMillis },
+            )
+        }
+
     suspend fun loadInbox(): CareResult<List<TeacherInboxItem>> {
         val summaries = when (val result = alerts.listTeacherSummaries()) {
             is CareResult.Failure -> return result
@@ -121,6 +150,24 @@ class TeacherWorkbenchService(
         )
         val result = gateway.deliver(dto, "${summary.eventId}:${summary.occurredAtEpochMillis}")
         if (result is CareResult.Success) recordAudit(actor.actorId, "simulate_alert_delivery", eventId, result.value.status.name)
+        return result
+    }
+
+    suspend fun reviewExit(
+        enrollmentId: String,
+        approve: Boolean,
+        note: String,
+    ): CareResult<AaEnrollment> {
+        if (note.isBlank()) return CareResult.Failure(CareFailure.InvalidInput("Review note is required"))
+        val actor = when (val result = session.currentActor()) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
+        val decision = if (approve) ExitReviewDecision.APPROVED else ExitReviewDecision.REJECTED
+        val result = followUps.reviewExit(enrollmentId, decision, note.trim())
+        if (result is CareResult.Success) {
+            recordAudit(actor.actorId, "teacher_review_aa_exit", enrollmentId, decision.name)
+        }
         return result
     }
 
