@@ -39,6 +39,8 @@ interface CareDao {
     suspend fun sampleForOwner(id: String, ownerId: String, domain: String): HealthSampleEntity?
     @Query("SELECT * FROM care_health_samples WHERE sampleId=:id AND dataDomain=:domain")
     suspend fun sample(id: String, domain: String): HealthSampleEntity?
+    @Query("DELETE FROM care_health_samples WHERE ownerId=:ownerId AND dataDomain=:domain AND type IN (:types)")
+    suspend fun deleteSamples(ownerId: String, domain: String, types: List<String>): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertSignals(values: List<SignalEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEvaluation(value: EvaluationEntity)
@@ -82,6 +84,12 @@ interface CareDao {
     suspend fun tasksForStudent(studentId: String, domain: String): List<FollowUpTaskEntity>
     @Query("SELECT * FROM care_follow_up_tasks WHERE taskId=:id AND studentId=:studentId AND dataDomain=:domain")
     suspend fun taskForStudent(id: String, studentId: String, domain: String): FollowUpTaskEntity?
+    @Query("SELECT COUNT(*) FROM care_follow_up_tasks WHERE studentId=:studentId AND dataDomain=:domain AND type='ASSESSMENT_RETAKE' AND status='COMPLETED' AND completedAtEpochMillis>=:since")
+    suspend fun completedAssessmentRetakeCount(studentId: String, domain: String, since: Long): Int
+    @Query("SELECT COUNT(*) FROM care_alerts WHERE studentId=:studentId AND dataDomain=:domain AND minimalReasonTags LIKE '%SAFETY_REVIEW_REQUIRED%' AND disposition!='CLOSED'")
+    suspend fun unresolvedSafetyConcernCount(studentId: String, domain: String): Int
+    @Query("UPDATE care_follow_up_tasks SET status='CANCELLED' WHERE studentId=:studentId AND dataDomain=:domain AND taskId LIKE :taskPrefix AND status NOT IN ('COMPLETED', 'CANCELLED')")
+    suspend fun cancelOpenTasks(studentId: String, domain: String, taskPrefix: String): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAudit(value: AuditEntity): Long
 }

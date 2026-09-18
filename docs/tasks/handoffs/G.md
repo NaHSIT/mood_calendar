@@ -19,6 +19,10 @@
 - 教师工作台可确认预警并启动干预，`RoomInterventionRepository.startWithAa` 保证干预和 AA 入库的事务一致性；学生随访页通过 F 的适配器读取和操作任务/退出申请。
 - 健康授权不再是页面临时状态：授权修订写入 Room，按修订号拉取并加密保存演示样本，学生原始数据页可读取展示；撤权会停止后续同步。
 - AA 入组后首次打开随访页会幂等生成打卡、量表复测和教师联系任务；量表复测跳转量表页，只有量表保存成功才完成任务，教师联系任务不能由学生自行完成。
+- PHQ-9/GAD-7 页面已提供完整可作答题目和四档频率选项；仍明确标注为筛查而非诊断，PHQ-9 安全题非零时立即展示求助提示。
+- 风险评估按评估时刻向前读取完整 14 天量表窗口，并将当前授权修订下的合格生理辅助信号写入评估输入，不再固定传空列表。
+- 原始健康数据删除已接通学生权限限定的 Room 删除接口。
+- AA 退出申请会校验 7 天稳定观察、至少一次量表复测和未解决安全关注；教师工作台提供责任范围内的批准/驳回入口，批准操作会事务内取消未来任务。
 
 ## 修改文件
 
@@ -30,6 +34,12 @@
 - `app/src/main/java/com/example/mdd_calender/integration/app/AppCareServices.kt`
 - `app/src/main/java/com/example/mdd_calender/integration/app/CareScreens.kt`
 - `app/src/main/java/com/example/mdd_calender/feature/followup/FollowUpRepositoryUiAdapter.kt`
+- `app/src/main/java/com/example/mdd_calender/feature/assessment/QuestionnaireCatalog.kt`
+- `app/src/main/java/com/example/mdd_calender/feature/health/HealthScreens.kt`
+- `app/src/main/java/com/example/mdd_calender/data/care/CareDao.kt`
+- `app/src/main/java/com/example/mdd_calender/data/care/PrivateRepositories.kt`
+- `app/src/main/java/com/example/mdd_calender/data/care/WorkRepositories.kt`
+- `app/src/main/java/com/example/mdd_calender/domain/port/HealthPorts.kt`
 - `app/src/main/java/com/example/mdd_calender/ui/navigation/AppNavigation.kt`
 - `app/src/main/java/com/example/mdd_calender/ui/screens/MainScreen.kt`
 - `app/src/main/res/xml/backup_rules.xml`
@@ -39,7 +49,7 @@
 
 ## 公开签名/行为变更
 
-- 未新增跨模块公共契约。
+- `StudentHealthRepository` 新增当前学生按样本类型删除原始健康数据的受限接口。
 - `MoodViewModel.saveMoodWithContent(...)` 签名不变，修正编辑时的创建时间语义。
 - `AnalysisScreen(...)` 签名不变，旧关键词“诊断”路径不再从 UI 触发。
 
@@ -51,7 +61,7 @@
 - 重新合入 B–F、完成页面和事件链后执行同一命令：通过，`BUILD SUCCESSFUL` (1分 11秒)。
 - 补齐健康持久化、AA 任务生成和量表复测回跳后再次执行 `:app:testDebugUnitTest :app:assembleDebug`：通过，`BUILD SUCCESSFUL` (51秒)。
 - 生成 APK：`app/build/outputs/apk/debug/app-debug.apk`。
-- `:app:lintDebug`：未完成。源码编译阶段通过，但 `generateDebugAndroidTestLintModel` 需下载隔离缓存中缺失的 `androidx.test.ext:junit:1.3.0`，沙箱网络请求被拒绝。
+- 修复 Compose 非可观察 Locale 读取后，`:app:lintDebug`：通过，`BUILD SUCCESSFUL` (2分05秒)；报告为 0 error、59 warning，剩余项主要是依赖可升级、旧资源/图标和 KTX 风格提示。
 - 尚无设备/模拟器，未验证 UI 导航、旋转、重启、数据库迁移和权限隔离。
 
 ## 备份策略取舍
@@ -60,7 +70,6 @@ A 的在建方案将 care 表和旧心情/纪念日表放在同一 `mood_databas
 
 ## 尚存边界
 
-- 当前领域仓储没有删除原始健康样本的契约，因此“删除已保存的原始数据”会明确提示未执行，不会伪装成功；需要先补充受审计的删除端口和实现。
 - AA 初始任务在学生首次进入随访页时幂等物化，不是后台调度；生产版应由可靠任务调度器在入组事务后触发。
 - 尚无设备/模拟器，仍需手工走查导航、进程重启恢复、数据库迁移和角色权限隔离。
 

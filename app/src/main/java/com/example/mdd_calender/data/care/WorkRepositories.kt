@@ -256,11 +256,12 @@ private fun InterventionEntity.toModel(cipher: AuthenticatedCipher): CareResult<
 }
 
 class RoomFollowUpRepository(
-    private val dao: CareDao,
+    private val database: MoodDatabase,
     private val session: SessionProvider,
     private val cipher: AuthenticatedCipher,
     private val clock: UtcClock = SystemUtcClock,
 ) : FollowUpRepository {
+    private val dao get() = database.careDao()
     override suspend fun currentStudentEnrollment(): CareResult<AaEnrollment> {
         val actor = when (val result = session.actorWithRole(ActorRole.STUDENT)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
         val value = dao.activeEnrollment(actor.actorId, actor.dataDomain.name) ?: return CareResult.Failure(CareFailure.NotFound("active AA enrollment", actor.actorId))
@@ -286,6 +287,8 @@ class RoomFollowUpRepository(
         val actor = when (val result = session.actorWithRole(ActorRole.STUDENT)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
         if (reason.isBlank()) return CareResult.Failure(CareFailure.InvalidInput("Exit reason is required"))
         val entity = dao.activeEnrollment(actor.actorId, actor.dataDomain.name) ?: return CareResult.Failure(CareFailure.NotFound("active AA enrollment", actor.actorId))
+        if (entity.status != AaStatus.TRACKING.name) return CareResult.Failure(CareFailure.Conflict("退出申请已提交或随访已结束"))
+        exitIneligibility(entity, actor.dataDomain.name)?.let { return CareResult.Failure(it) }
         val review = ExitReview(clock.nowEpochMillis(), reason, null, null, null, null)
         val encrypted = when (val result = encryptReview(review, entity.enrollmentId, cipher)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
         val updated = entity.copy(status = AaStatus.EXIT_REVIEW_PENDING.name, encryptedExitReview = encrypted)
@@ -302,16 +305,41 @@ class RoomFollowUpRepository(
 
     override suspend fun reviewExit(enrollmentId: String, decision: ExitReviewDecision, note: String): CareResult<AaEnrollment> {
         val actor = when (val result = session.actorWithRole(ActorRole.TEACHER)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
-        val entity = dao.enrollment(enrollmentId, actor.dataDomain.name) ?: return CareResult.Failure(CareFailure.NotFound("AA enrollment", enrollmentId))
-        if (!dao.isAssigned(actor.actorId, entity.studentId, actor.dataDomain.name)) return CareResult.Failure(CareFailure.Forbidden("Teacher is not assigned to this student"))
-        val current = when (val mapped = entity.toModel(cipher)) { is CareResult.Failure -> return mapped; is CareResult.Success -> mapped.value }
-        val pending = current.exitReview ?: return CareResult.Failure(CareFailure.Conflict("No exit request is pending"))
-        if (current.status != AaStatus.EXIT_REVIEW_PENDING) return CareResult.Failure(CareFailure.Conflict("Enrollment is not pending exit review"))
-        val reviewed = pending.copy(reviewedAtEpochMillis = clock.nowEpochMillis(), reviewerId = actor.actorId, decision = decision, reviewNote = note)
-        val encrypted = when (val result = encryptReview(reviewed, enrollmentId, cipher)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
-        val updated = entity.copy(status = if (decision == ExitReviewDecision.APPROVED) AaStatus.EXITED.name else AaStatus.TRACKING.name, activeSlot = if (decision == ExitReviewDecision.APPROVED) null else "ACTIVE", encryptedExitReview = encrypted)
-        dao.updateEnrollment(updated)
-        return updated.toModel(cipher)
+        return database.withTransaction {
+            val entity = dao.enrollment(enrollmentId, actor.dataDomain.name) ?: return@withTransaction CareResult.Failure(CareFailure.NotFound("AA enrollment", enrollmentId))
+            if (!dao.isAssigned(actor.actorId, entity.studentId, actor.dataDomain.name)) return@withTransaction CareResult.Failure(CareFailure.Forbidden("Teacher is not assigned to this student"))
+            val current = when (val mapped = entity.toModel(cipher)) { is CareResult.Failure -> return@withTransaction mapped; is CareResult.Success -> mapped.value }
+            val pending = current.exitReview ?: return@withTransaction CareResult.Failure(CareFailure.Conflict("No exit request is pending"))
+            if (current.status != AaStatus.EXIT_REVIEW_PENDING) return@withTransaction CareResult.Failure(CareFailure.Conflict("Enrollment is not pending exit review"))
+            if (decision == ExitReviewDecision.APPROVED) {
+                exitIneligibility(entity, actor.dataDomain.name)?.let { return@withTransaction CareResult.Failure(it) }
+            }
+            val reviewed = pending.copy(reviewedAtEpochMillis = clock.nowEpochMillis(), reviewerId = actor.actorId, decision = decision, reviewNote = note)
+            val encrypted = when (val result = encryptReview(reviewed, enrollmentId, cipher)) { is CareResult.Failure -> return@withTransaction result; is CareResult.Success -> result.value }
+            val updated = entity.copy(status = if (decision == ExitReviewDecision.APPROVED) AaStatus.EXITED.name else AaStatus.TRACKING.name, activeSlot = if (decision == ExitReviewDecision.APPROVED) null else "ACTIVE", encryptedExitReview = encrypted)
+            dao.updateEnrollment(updated)
+            if (decision == ExitReviewDecision.APPROVED) {
+                dao.cancelOpenTasks(entity.studentId, actor.dataDomain.name, "${entity.enrollmentId}:%")
+            }
+            updated.toModel(cipher)
+        }
+    }
+
+    private suspend fun exitIneligibility(entity: AaEnrollmentEntity, domain: String): CareFailure.Conflict? {
+        if (clock.nowEpochMillis() - entity.enrolledAtEpochMillis < MINIMUM_STABLE_OBSERVATION_MILLIS) {
+            return CareFailure.Conflict("尚未完成 7 天稳定观察期")
+        }
+        if (dao.unresolvedSafetyConcernCount(entity.studentId, domain) > 0) {
+            return CareFailure.Conflict("仍有未解决的安全关注，不能退出")
+        }
+        if (dao.completedAssessmentRetakeCount(entity.studentId, domain, entity.enrolledAtEpochMillis) < 1) {
+            return CareFailure.Conflict("稳定观察期内至少需要完成一次量表复测")
+        }
+        return null
+    }
+
+    private companion object {
+        const val MINIMUM_STABLE_OBSERVATION_MILLIS = 7L * 24 * 60 * 60 * 1000
     }
 }
 

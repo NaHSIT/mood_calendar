@@ -19,6 +19,7 @@ interface StudentHealthRepository {
     suspend fun saveForCurrentStudent(samples: List<RawHealthSample>): CareResult<Unit>
     suspend fun listForCurrentStudent(fromEpochMillis: Long, toEpochMillis: Long): CareResult<List<RawHealthSample>>
     suspend fun getForCurrentStudent(sampleId: String): CareResult<RawHealthSample>
+    suspend fun deleteForCurrentStudent(types: Set<com.example.mdd_calender.domain.model.HealthSampleType>): CareResult<Int>
 }
 
 /** Application-internal signal input; implementations require a SYSTEM session. */

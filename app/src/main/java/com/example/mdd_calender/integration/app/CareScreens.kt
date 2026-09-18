@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -33,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mdd_calender.domain.model.CareResult
+import com.example.mdd_calender.domain.model.AaStatus
+import com.example.mdd_calender.domain.model.ExitReviewDecision
 import com.example.mdd_calender.feature.assessment.AssessmentScorer
 import com.example.mdd_calender.feature.assessment.AssessmentType
 import com.example.mdd_calender.feature.assessment.QuestionnaireCatalog
@@ -101,12 +104,12 @@ fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, o
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(question)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            (0..3).forEach { value ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            descriptor.responseOptions.forEachIndexed { value, label ->
                                 FilterChip(
                                     selected = answers[index] == value,
                                     onClick = { answers[index] = value },
-                                    label = { Text(value.toString()) },
+                                    label = { Text("$value $label") },
                                 )
                             }
                         }
@@ -115,6 +118,12 @@ fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, o
             }
             item {
                 if (score is ScoreResult.Incomplete) Text("还有 ${score.missingItemIndices.size} 题未填写")
+                if (type == AssessmentType.PHQ_9 && (answers.getOrNull(8) ?: 0) > 0) {
+                    Text(
+                        "你在安全相关题目中选择了非零答案。若你正处于危险中，请立即联系可信任的人、当地急救或危机干预服务。提交后系统也会标记为需要尽快人工复核。",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
                 message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
                 Button(
                     enabled = score is ScoreResult.Complete,
@@ -187,7 +196,16 @@ fun HealthRoute(services: AppCareServices, onBack: () -> Unit) {
                     busy = false
                 }
             },
-            onDeleteRawData = { status = "当前存储接口不支持删除；未执行删除。" },
+            onDeleteRawData = { metrics ->
+                scope.launch {
+                    busy = true
+                    status = when (val result = services.deleteRawHealthData(metrics)) {
+                        is CareResult.Success -> "已删除 ${result.value} 条原始健康数据；既有最小化历史摘要不会随之撤回。"
+                        is CareResult.Failure -> "删除失败，请重试。"
+                    }
+                    busy = false
+                }
+            },
             onOpenRawData = {
                 scope.launch {
                     rawView = when (val result = services.rawHealthDataView()) {
@@ -206,6 +224,7 @@ fun FollowUpRoute(services: AppCareServices, onAssessmentTask: (String) -> Unit,
     var state by remember { mutableStateOf<com.example.mdd_calender.domain.model.CareResult<com.example.mdd_calender.feature.followup.StudentFollowUpUiState>?>(null) }
     val adapter = remember { FollowUpRepositoryUiAdapter(services.followUp, services.assessments) }
     val scope = rememberCoroutineScope()
+    var operationMessage by remember { mutableStateOf<String?>(null) }
     var taskTypes by remember { mutableStateOf<Map<String, com.example.mdd_calender.domain.model.FollowUpTaskType>>(emptyMap()) }
     suspend fun reload() {
         services.ensureFollowUpTasks()
@@ -232,16 +251,30 @@ fun FollowUpRoute(services: AppCareServices, onAssessmentTask: (String) -> Unit,
                             onAssessmentTask(taskId)
                         } else scope.launch { adapter.completeTask(taskId, System.currentTimeMillis()); reload() }
                     },
-                    onRequestExit = { scope.launch { adapter.requestExit("学生演示退出申请"); reload() } },
+                    onRequestExit = {
+                        scope.launch {
+                            operationMessage = when (val request = adapter.requestExit("学生主动申请退出")) {
+                                is CareResult.Success -> "退出申请已提交，等待责任教师审核。"
+                                is CareResult.Failure -> when (val error = request.error) {
+                                    is com.example.mdd_calender.domain.model.CareFailure.Conflict -> error.reason
+                                    else -> "退出申请失败，请稍后重试。"
+                                }
+                            }
+                            reload()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
                 )
                 is CareResult.Failure -> Text("当前没有可用的随访记录。", Modifier.padding(20.dp))
             }
+            operationMessage?.let { Text(it, Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.primary) }
         }
     }
 }
 
 @Composable
 fun TeacherRoute(services: AppCareServices, onBack: () -> Unit) {
+    var reviewingExits by remember { mutableStateOf(false) }
     val vm: TeacherWorkbenchViewModel = viewModel(
         key = "teacher-workbench",
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
@@ -252,12 +285,69 @@ fun TeacherRoute(services: AppCareServices, onBack: () -> Unit) {
     )
     Scaffold(topBar = {
         TopAppBar(
-            title = { Text("教师预警工作台") },
+            title = { Text(if (reviewingExits) "AA 退出审核" else "教师预警工作台") },
             navigationIcon = { TextButton(onClick = onBack) { Text("返回") } },
+            actions = {
+                TextButton(onClick = { reviewingExits = !reviewingExits }) {
+                    Text(if (reviewingExits) "预警" else "退出审核")
+                }
+            },
         )
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            TeacherWorkbenchRoute(vm)
+            if (reviewingExits) TeacherExitReviewPanel(services) else TeacherWorkbenchRoute(vm)
+        }
+    }
+}
+
+@Composable
+private fun TeacherExitReviewPanel(services: AppCareServices) {
+    var enrollments by remember { mutableStateOf<CareResult<List<com.example.mdd_calender.domain.model.AaEnrollment>>?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    suspend fun reload() { enrollments = services.teacherFollowUp.listAssignedEnrollments() }
+    LaunchedEffect(Unit) { reload() }
+
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("仅展示责任范围内的退出申请。批准时会再次校验稳定观察期、量表复测和未解决安全关注，并取消未来任务。", style = MaterialTheme.typography.bodySmall)
+        message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        when (val result = enrollments) {
+            null -> Text("加载中…")
+            is CareResult.Failure -> Text("退出申请加载失败。")
+            is CareResult.Success -> {
+                val pending = result.value.filter { it.status == AaStatus.EXIT_REVIEW_PENDING }
+                if (pending.isEmpty()) Text("当前没有待审核的退出申请。")
+                else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(pending, key = { it.enrollmentId }) { enrollment ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("学生：${enrollment.studentId}", style = MaterialTheme.typography.titleMedium)
+                                Text("申请理由：${enrollment.exitReview?.reason.orEmpty()}")
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(onClick = {
+                                        scope.launch {
+                                            message = when (val reviewed = services.teacherFollowUp.reviewExit(enrollment.enrollmentId, ExitReviewDecision.APPROVED, "责任教师批准")) {
+                                                is CareResult.Success -> "已批准退出，未来任务已取消。"
+                                                is CareResult.Failure -> (reviewed.error as? com.example.mdd_calender.domain.model.CareFailure.Conflict)?.reason ?: "批准失败。"
+                                            }
+                                            reload()
+                                        }
+                                    }) { Text("批准") }
+                                    OutlinedButton(onClick = {
+                                        scope.launch {
+                                            message = when (services.teacherFollowUp.reviewExit(enrollment.enrollmentId, ExitReviewDecision.REJECTED, "继续观察")) {
+                                                is CareResult.Success -> "已驳回，学生继续随访。"
+                                                is CareResult.Failure -> "驳回失败。"
+                                            }
+                                            reload()
+                                        }
+                                    }) { Text("驳回") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

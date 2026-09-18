@@ -6,6 +6,7 @@ data class QuestionnaireDescriptor(
     val version: String,
     val recallPeriod: String,
     val itemPlaceholders: List<String>,
+    val responseOptions: List<String>,
     val sourceUrl: String,
     val contentNotice: String,
 )
@@ -33,29 +34,47 @@ fun ScoreResult.Complete.toAssessmentRecord(
     )
 }
 
-/**
- * The item labels below are intentionally placeholders, not a claimed official Chinese edition.
- * Production wording, age suitability, licensing, and professional review remain external inputs.
- */
 object QuestionnaireCatalog {
+    private val frequencyOptions = listOf("完全没有", "有几天", "一半以上天数", "几乎每天")
+
     val phq9 = QuestionnaireDescriptor(
         type = AssessmentType.PHQ_9,
-        displayName = "PHQ-9 情绪筛查（原型）",
-        version = "prototype-zh-pending-review",
-        recallPeriod = "请回顾过去两周",
-        itemPlaceholders = (1..9).map { "PHQ-9 第 $it 题（中文题文待专业审核）" },
+        displayName = "PHQ-9 情绪自评",
+        version = "app-zh-cn-v1",
+        recallPeriod = "过去两周，你有多经常受到以下问题困扰？",
+        itemPlaceholders = listOf(
+            "做事时提不起劲或没有兴趣",
+            "感到心情低落、沮丧或绝望",
+            "入睡困难、睡不安稳，或睡眠过多",
+            "感觉疲倦或没有活力",
+            "食欲不振或吃得过多",
+            "觉得自己很糟糕，或觉得自己很失败，或让自己或家人失望",
+            "难以集中注意力，例如阅读或看视频时",
+            "动作或说话慢到别人可能察觉；或相反，烦躁、坐立不安，比平常活动更多",
+            "想到自己最好死去，或有伤害自己的念头",
+        ),
+        responseOptions = frequencyOptions,
         sourceUrl = "https://www.hiv.uw.edu/page/mental-health-screening/phq-9",
-        contentNotice = "本原型仅展示填写与计分流程，不提供诊断；中文题文、年龄适用性及授权状态待审核。",
+        contentNotice = "这是筛查自评，不是诊断。应用内简体中文表述依据英文原量表，正式使用前仍需本地专业审校与年龄适用性确认。",
     )
 
     val gad7 = QuestionnaireDescriptor(
         type = AssessmentType.GAD_7,
-        displayName = "GAD-7 焦虑筛查（原型）",
-        version = "prototype-zh-pending-review",
-        recallPeriod = "请回顾过去两周",
-        itemPlaceholders = (1..7).map { "GAD-7 第 $it 题（中文题文待专业审核）" },
+        displayName = "GAD-7 焦虑自评",
+        version = "app-zh-cn-v1",
+        recallPeriod = "过去两周，你有多经常受到以下问题困扰？",
+        itemPlaceholders = listOf(
+            "感到紧张、焦虑或急切",
+            "无法停止或控制担忧",
+            "对各种事情担忧过多",
+            "很难放松下来",
+            "坐立不安，难以安静地坐着",
+            "容易烦恼或易怒",
+            "感到似乎将有可怕的事情发生",
+        ),
+        responseOptions = frequencyOptions,
         sourceUrl = "https://www.hiv.uw.edu/page/mental-health-screening/gad-7",
-        contentNotice = "本原型仅展示填写与计分流程，不提供诊断；中文题文、年龄适用性及授权状态待审核。",
+        contentNotice = "这是筛查自评，不是诊断。应用内简体中文表述依据英文原量表，正式使用前仍需本地专业审校与年龄适用性确认。",
     )
 
     fun descriptor(type: AssessmentType): QuestionnaireDescriptor = when (type) {

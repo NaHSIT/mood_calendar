@@ -15,6 +15,7 @@ import com.example.mdd_calender.domain.model.ActorContext
 import com.example.mdd_calender.domain.model.ActorRole
 import com.example.mdd_calender.domain.model.DataDomain
 import com.example.mdd_calender.domain.model.CareResult
+import com.example.mdd_calender.domain.model.ConsentState
 import com.example.mdd_calender.domain.model.DeliveryRecord
 import com.example.mdd_calender.domain.model.InterventionCase
 import com.example.mdd_calender.domain.model.InterventionStatus
@@ -36,6 +37,7 @@ import com.example.mdd_calender.feature.health.HealthDataDomain
 import com.example.mdd_calender.feature.health.HealthMetric
 import com.example.mdd_calender.feature.health.HealthSample
 import com.example.mdd_calender.feature.health.RawHealthDataView
+import com.example.mdd_calender.feature.health.RuleBasedPhysiologySignalExtractor
 import com.example.mdd_calender.feature.risk.DemonstrationRiskEvaluator
 import com.example.mdd_calender.feature.risk.AlertEventFactory
 import com.example.mdd_calender.feature.teacher.TeacherWorkbenchService
@@ -69,7 +71,7 @@ class AppCareServices(context: Context) {
     val evaluations = RoomEvaluationRepository(database.careDao(), session)
     val alerts = RoomAlertRepository(database.careDao(), session, cipher)
     val interventions = RoomInterventionRepository(database, session, cipher)
-    val followUp = RoomFollowUpRepository(database.careDao(), session, cipher)
+    val followUp = RoomFollowUpRepository(database, session, cipher)
     val audit = RoomAuditRepository(database.careDao(), session)
 
     /** Local-only provider used by the prototype; it never reads a device health store. */
@@ -77,6 +79,7 @@ class AppCareServices(context: Context) {
     val healthDataProvider = DomainHealthDataProviderAdapter(demoHealthProvider)
     val riskEvaluator = DemonstrationRiskEvaluator()
     private val systemAssessments = RoomAssessmentRepository(database.careDao(), systemSession, cipher)
+    private val systemHealth = RoomStudentHealthRepository(database.careDao(), systemSession, cipher)
     private val systemEvaluations = RoomEvaluationRepository(database.careDao(), systemSession)
     private val systemAlerts = RoomAlertRepository(database.careDao(), systemSession, cipher)
     private val administration = RoomCareAdministration(database.careDao(), systemSession, cipher)
@@ -88,6 +91,7 @@ class AppCareServices(context: Context) {
         session = teacherSession,
         audit = RoomAuditRepository(database.careDao(), teacherSession),
     )
+    val teacherFollowUp = RoomFollowUpRepository(database, teacherSession, cipher)
 
     suspend fun submitAssessmentAndTriggerCare(record: com.example.mdd_calender.domain.model.AssessmentRecord): CareResult<CareChainReceipt> {
         when (val prepared = administration.upsertStudent(record.studentId, "DEMO-001")) {
@@ -110,11 +114,15 @@ class AppCareServices(context: Context) {
             is CareResult.Failure -> return result
             is CareResult.Success -> result.value
         }
+        val physiologySignals = when (val result = currentPhysiologySignals(record.studentId, evaluationAt)) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
         val evaluation = when (val result = riskEvaluator.evaluate(
             RiskEvaluationInput(
                 studentId = record.studentId,
                 assessments = completed,
-                auxiliarySignals = emptyList(),
+                auxiliarySignals = physiologySignals,
                 policyVersion = DemonstrationRiskEvaluator.RULE_VERSION,
                 generatedAtEpochMillis = evaluationAt,
             ),
@@ -166,6 +174,38 @@ class AppCareServices(context: Context) {
             is CareResult.Success -> Unit
         }
         return CareResult.Success(CareChainReceipt(record.assessmentId, evaluation.evaluationId, alert.eventId, deliveryRecord))
+    }
+
+    private suspend fun currentPhysiologySignals(
+        studentId: String,
+        nowEpochMillis: Long,
+    ): CareResult<List<com.example.mdd_calender.domain.model.PhysiologySignal>> {
+        val currentConsent = when (val result = consent.getForCurrentStudent()) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
+        if (currentConsent.state != ConsentState.GRANTED || currentConsent.scopes.isEmpty()) {
+            return CareResult.Success(emptyList())
+        }
+        val request = HealthPullRequest(
+            studentId = studentId,
+            scopes = currentConsent.scopes,
+            fromEpochMillis = nowEpochMillis - HEALTH_SIGNAL_WINDOW_MILLIS,
+            toEpochMillis = nowEpochMillis,
+            consentRevision = currentConsent.revision,
+        )
+        val samples = when (val result = systemHealth.samplesForExtraction(request)) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
+        val signals = when (val result = RuleBasedPhysiologySignalExtractor().extract(samples, currentConsent)) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
+        return when (val stored = systemEvaluations.saveSignalsInternal(signals)) {
+            is CareResult.Failure -> stored
+            is CareResult.Success -> CareResult.Success(signals)
+        }
     }
 
     suspend fun healthConsentSnapshot(): CareResult<HealthConsentSnapshot> = when (val result = consent.getForCurrentStudent()) {
@@ -221,6 +261,16 @@ class AppCareServices(context: Context) {
         }
     }
 
+    suspend fun deleteRawHealthData(metrics: Set<HealthMetric>): CareResult<Int> {
+        val types = metrics.flatMap { metric ->
+            when (metric) {
+                HealthMetric.HEART_RATE -> listOf(HealthSampleType.HEART_RATE_BPM)
+                HealthMetric.SLEEP -> listOf(HealthSampleType.SLEEP_DURATION_MINUTES, HealthSampleType.SLEEP_QUALITY)
+            }
+        }.toSet()
+        return studentHealth.deleteForCurrentStudent(types)
+    }
+
     /** Materializes the initial AA schedule idempotently once teacher startWithAa has enrolled the student. */
     suspend fun ensureFollowUpTasks(): CareResult<Unit> {
         val enrollment = when (val result = followUp.currentStudentEnrollment()) {
@@ -262,6 +312,10 @@ class AppCareServices(context: Context) {
             is CareResult.Success -> Unit
         }
         return CareResult.Success(Unit)
+    }
+
+    private companion object {
+        const val HEALTH_SIGNAL_WINDOW_MILLIS = 72L * 60 * 60 * 1000
     }
 }
 

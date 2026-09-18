@@ -237,6 +237,15 @@ class RoomStudentHealthRepository(
         return entity.toModel(cipher)
     }
 
+    override suspend fun deleteForCurrentStudent(types: Set<HealthSampleType>): CareResult<Int> {
+        val actor = when (val result = session.requireRole(ActorRole.STUDENT)) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
+        if (types.isEmpty()) return CareResult.Success(0)
+        return CareResult.Success(dao.deleteSamples(actor.actorId, actor.dataDomain.name, types.map { it.name }))
+    }
+
     override suspend fun samplesForExtraction(request: HealthPullRequest): CareResult<List<RawHealthSample>> {
         val actor = when (val result = session.requireRole(ActorRole.SYSTEM)) {
             is CareResult.Failure -> return result
@@ -247,7 +256,17 @@ class RoomStudentHealthRepository(
         if (consent.state != ConsentState.GRANTED.name || consent.revision != request.consentRevision) {
             return CareResult.Failure(CareFailure.Conflict("Consent was revoked or revised"))
         }
-        return decodeAll(dao.samples(request.studentId, actor.dataDomain.name, request.fromEpochMillis, request.toEpochMillis))
+        val decoded = when (val result = decodeAll(dao.samples(request.studentId, actor.dataDomain.name, request.fromEpochMillis, request.toEpochMillis))) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
+        val allowedTypes = request.scopes.flatMap {
+            when (it) {
+                HealthScope.HEART_RATE -> listOf(HealthSampleType.HEART_RATE_BPM)
+                HealthScope.SLEEP -> listOf(HealthSampleType.SLEEP_DURATION_MINUTES, HealthSampleType.SLEEP_QUALITY)
+            }
+        }.toSet()
+        return CareResult.Success(decoded.filter { it.consentRevision == request.consentRevision && it.type in allowedTypes })
     }
 
     private fun decodeAll(entities: List<HealthSampleEntity>): CareResult<List<RawHealthSample>> {
