@@ -237,6 +237,21 @@ class RoomStudentHealthRepository(
         return entity.toModel(cipher)
     }
 
+    override suspend fun deleteForCurrentStudent(scopes: Set<HealthScope>): CareResult<Int> {
+        val actor = when (val result = session.requireRole(ActorRole.STUDENT)) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
+        if (scopes.isEmpty()) return CareResult.Failure(CareFailure.InvalidInput("At least one health scope is required for deletion"))
+        val types = scopes.flatMap {
+            when (it) {
+                HealthScope.HEART_RATE -> listOf(HealthSampleType.HEART_RATE_BPM)
+                HealthScope.SLEEP -> listOf(HealthSampleType.SLEEP_DURATION_MINUTES, HealthSampleType.SLEEP_QUALITY)
+            }
+        }.map { it.name }
+        return CareResult.Success(dao.deleteSamplesForOwner(actor.actorId, actor.dataDomain.name, types))
+    }
+
     override suspend fun samplesForExtraction(request: HealthPullRequest): CareResult<List<RawHealthSample>> {
         val actor = when (val result = session.requireRole(ActorRole.SYSTEM)) {
             is CareResult.Failure -> return result

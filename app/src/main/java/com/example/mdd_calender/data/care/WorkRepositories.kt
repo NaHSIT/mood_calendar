@@ -35,6 +35,7 @@ import com.example.mdd_calender.domain.port.FollowUpRepository
 import com.example.mdd_calender.domain.port.EvaluationRepository
 import com.example.mdd_calender.domain.port.InterventionRepository
 import com.example.mdd_calender.domain.port.SessionProvider
+import com.example.mdd_calender.domain.policy.AaExitPolicy
 import com.example.mdd_calender.security.AndroidKeystoreCipher
 import com.example.mdd_calender.security.AuthenticatedCipher
 import org.json.JSONObject
@@ -89,6 +90,28 @@ class RoomAlertRepository(
             return CareResult.Failure(CareFailure.NotFound("alert", eventId))
         }
         return CareResult.Success(value.toSummary())
+    }
+
+    override suspend fun updateTeacherDisposition(eventId: String, disposition: AlertDisposition): CareResult<TeacherAlertSummary> {
+        val actor = when (val result = session.actorWithRole(ActorRole.TEACHER)) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
+        val entity = dao.alertForTeacher(eventId, actor.actorId, actor.dataDomain.name) ?: run {
+            if (dao.alert(eventId, actor.dataDomain.name) != null) return CareResult.Failure(CareFailure.Forbidden("Teacher is not assigned to this student"))
+            return CareResult.Failure(CareFailure.NotFound("alert", eventId))
+        }
+        val current = AlertDisposition.valueOf(entity.disposition)
+        val allowed = when (current) {
+            AlertDisposition.NEW -> disposition == AlertDisposition.ACKNOWLEDGED
+            AlertDisposition.ACKNOWLEDGED -> disposition in setOf(AlertDisposition.IN_PROGRESS, AlertDisposition.CLOSED)
+            AlertDisposition.IN_PROGRESS -> disposition == AlertDisposition.CLOSED
+            AlertDisposition.CLOSED -> disposition == AlertDisposition.CLOSED
+        }
+        if (!allowed) return CareResult.Failure(CareFailure.Conflict("Invalid alert disposition transition: $current -> $disposition"))
+        val updated = entity.copy(disposition = disposition.name)
+        dao.updateAlert(updated)
+        return CareResult.Success(updated.toSummary())
     }
 
     override suspend fun saveDeliveryInternal(delivery: DeliveryRecord): CareResult<DeliveryRecord> {
@@ -260,6 +283,7 @@ class RoomFollowUpRepository(
     private val session: SessionProvider,
     private val cipher: AuthenticatedCipher,
     private val clock: UtcClock = SystemUtcClock,
+    private val exitPolicy: AaExitPolicy = AaExitPolicy(),
 ) : FollowUpRepository {
     override suspend fun currentStudentEnrollment(): CareResult<AaEnrollment> {
         val actor = when (val result = session.actorWithRole(ActorRole.STUDENT)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
@@ -286,7 +310,20 @@ class RoomFollowUpRepository(
         val actor = when (val result = session.actorWithRole(ActorRole.STUDENT)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
         if (reason.isBlank()) return CareResult.Failure(CareFailure.InvalidInput("Exit reason is required"))
         val entity = dao.activeEnrollment(actor.actorId, actor.dataDomain.name) ?: return CareResult.Failure(CareFailure.NotFound("active AA enrollment", actor.actorId))
-        val review = ExitReview(clock.nowEpochMillis(), reason, null, null, null, null)
+        val now = clock.nowEpochMillis()
+        if (now - entity.enrolledAtEpochMillis < exitPolicy.minimumObservationMillis) {
+            return CareResult.Failure(CareFailure.Conflict("Minimum AA observation period has not been met"))
+        }
+        if (dao.unresolvedSafetyAlertCount(actor.actorId, actor.dataDomain.name) > 0) {
+            return CareResult.Failure(CareFailure.Conflict("Unresolved safety concern blocks AA exit"))
+        }
+        if (exitPolicy.requireAllFollowUpTasksResolved && dao.tasksForStudent(actor.actorId, actor.dataDomain.name).any {
+                it.status != FollowUpTaskStatus.COMPLETED.name && it.status != FollowUpTaskStatus.CANCELLED.name
+            }
+        ) {
+            return CareResult.Failure(CareFailure.Conflict("Incomplete follow-up tasks block AA exit"))
+        }
+        val review = ExitReview(now, reason, null, null, null, null)
         val encrypted = when (val result = encryptReview(review, entity.enrollmentId, cipher)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
         val updated = entity.copy(status = AaStatus.EXIT_REVIEW_PENDING.name, encryptedExitReview = encrypted)
         dao.updateEnrollment(updated)
@@ -309,9 +346,14 @@ class RoomFollowUpRepository(
         if (current.status != AaStatus.EXIT_REVIEW_PENDING) return CareResult.Failure(CareFailure.Conflict("Enrollment is not pending exit review"))
         val reviewed = pending.copy(reviewedAtEpochMillis = clock.nowEpochMillis(), reviewerId = actor.actorId, decision = decision, reviewNote = note)
         val encrypted = when (val result = encryptReview(reviewed, enrollmentId, cipher)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
-        val updated = entity.copy(status = if (decision == ExitReviewDecision.APPROVED) AaStatus.EXITED.name else AaStatus.TRACKING.name, activeSlot = if (decision == ExitReviewDecision.APPROVED) null else "ACTIVE", encryptedExitReview = encrypted)
-        dao.updateEnrollment(updated)
-        return updated.toModel(cipher)
+        return when (dao.finalizeExitReview(enrollmentId, actor.actorId, actor.dataDomain.name, decision == ExitReviewDecision.APPROVED, encrypted)) {
+            CareDao.EXIT_UPDATED -> dao.enrollment(enrollmentId, actor.dataDomain.name)!!.toModel(cipher)
+            CareDao.EXIT_NOT_FOUND -> CareResult.Failure(CareFailure.NotFound("AA enrollment", enrollmentId))
+            CareDao.EXIT_FORBIDDEN -> CareResult.Failure(CareFailure.Forbidden("Teacher is not assigned to this student"))
+            CareDao.EXIT_INVALID_STATE -> CareResult.Failure(CareFailure.Conflict("Enrollment is not pending exit review"))
+            CareDao.EXIT_SAFETY_BLOCKED -> CareResult.Failure(CareFailure.Conflict("Unresolved safety concern blocks AA exit"))
+            else -> CareResult.Failure(CareFailure.TemporarilyUnavailable("AA exit review could not be saved"))
+        }
     }
 }
 

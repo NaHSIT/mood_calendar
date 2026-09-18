@@ -19,6 +19,8 @@ interface StudentHealthRepository {
     suspend fun saveForCurrentStudent(samples: List<RawHealthSample>): CareResult<Unit>
     suspend fun listForCurrentStudent(fromEpochMillis: Long, toEpochMillis: Long): CareResult<List<RawHealthSample>>
     suspend fun getForCurrentStudent(sampleId: String): CareResult<RawHealthSample>
+    /** Deletes only the current student's encrypted raw samples in the trusted session domain. */
+    suspend fun deleteForCurrentStudent(scopes: Set<HealthScope>): CareResult<Int>
 }
 
 /** Application-internal signal input; implementations require a SYSTEM session. */
