@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -39,11 +40,14 @@ interface CareDao {
     suspend fun sampleForOwner(id: String, ownerId: String, domain: String): HealthSampleEntity?
     @Query("SELECT * FROM care_health_samples WHERE sampleId=:id AND dataDomain=:domain")
     suspend fun sample(id: String, domain: String): HealthSampleEntity?
+    @Query("DELETE FROM care_health_samples WHERE ownerId=:ownerId AND dataDomain=:domain AND type IN (:types)")
+    suspend fun deleteSamplesForOwner(ownerId: String, domain: String, types: List<String>): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertSignals(values: List<SignalEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertEvaluation(value: EvaluationEntity)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAlert(value: AlertEntity): Long
+    @Update suspend fun updateAlert(value: AlertEntity)
     @Query("SELECT * FROM care_alerts WHERE deduplicationKey=:key AND dataDomain=:domain")
     suspend fun alertByDeduplicationKey(key: String, domain: String): AlertEntity?
     @Query("SELECT * FROM care_alerts WHERE eventId=:eventId AND dataDomain=:domain")
@@ -52,6 +56,8 @@ interface CareDao {
     suspend fun alertsForTeacher(teacherId: String, domain: String): List<AlertEntity>
     @Query("SELECT a.* FROM care_alerts a INNER JOIN care_teacher_assignments t ON t.studentId=a.studentId AND t.dataDomain=a.dataDomain WHERE a.eventId=:eventId AND t.teacherId=:teacherId AND a.dataDomain=:domain")
     suspend fun alertForTeacher(eventId: String, teacherId: String, domain: String): AlertEntity?
+    @Query("SELECT COUNT(*) FROM care_alerts WHERE studentId=:studentId AND dataDomain=:domain AND disposition!='CLOSED' AND (',' || minimalReasonTags || ',') LIKE '%,SAFETY_REVIEW_REQUIRED,%'")
+    suspend fun unresolvedSafetyAlertCount(studentId: String, domain: String): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertDelivery(value: DeliveryEntity): Long
     @Update suspend fun updateDelivery(value: DeliveryEntity)
@@ -83,5 +89,41 @@ interface CareDao {
     @Query("SELECT * FROM care_follow_up_tasks WHERE taskId=:id AND studentId=:studentId AND dataDomain=:domain")
     suspend fun taskForStudent(id: String, studentId: String, domain: String): FollowUpTaskEntity?
 
+    @Transaction
+    suspend fun finalizeExitReview(
+        enrollmentId: String,
+        teacherId: String,
+        domain: String,
+        approved: Boolean,
+        encryptedReview: String,
+    ): Int {
+        val current = enrollment(enrollmentId, domain) ?: return EXIT_NOT_FOUND
+        if (!isAssigned(teacherId, current.studentId, domain)) return EXIT_FORBIDDEN
+        if (current.status != "EXIT_REVIEW_PENDING") return EXIT_INVALID_STATE
+        if (approved && unresolvedSafetyAlertCount(current.studentId, domain) > 0) return EXIT_SAFETY_BLOCKED
+
+        updateEnrollment(
+            current.copy(
+                status = if (approved) "EXITED" else "TRACKING",
+                activeSlot = if (approved) null else "ACTIVE",
+                encryptedExitReview = encryptedReview,
+            )
+        )
+        if (approved) {
+            tasksForStudent(current.studentId, domain)
+                .filter { it.status != "COMPLETED" && it.status != "CANCELLED" }
+                .forEach { updateTask(it.copy(status = "CANCELLED")) }
+        }
+        return EXIT_UPDATED
+    }
+
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAudit(value: AuditEntity): Long
+
+    companion object {
+        const val EXIT_UPDATED = 0
+        const val EXIT_NOT_FOUND = 1
+        const val EXIT_FORBIDDEN = 2
+        const val EXIT_INVALID_STATE = 3
+        const val EXIT_SAFETY_BLOCKED = 4
+    }
 }

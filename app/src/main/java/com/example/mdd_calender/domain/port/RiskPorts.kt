@@ -1,6 +1,7 @@
 package com.example.mdd_calender.domain.port
 
 import com.example.mdd_calender.domain.model.AlertEvent
+import com.example.mdd_calender.domain.model.AlertDisposition
 import com.example.mdd_calender.domain.model.AssessmentForEvaluation
 import com.example.mdd_calender.domain.model.CareResult
 import com.example.mdd_calender.domain.model.DeliveryRecord
@@ -25,6 +26,7 @@ interface AlertRepository {
     suspend fun saveInternal(event: AlertEvent): CareResult<AlertEvent>
     suspend fun listTeacherSummaries(): CareResult<List<TeacherAlertSummary>>
     suspend fun getTeacherSummary(eventId: String): CareResult<TeacherAlertSummary>
+    suspend fun updateTeacherDisposition(eventId: String, disposition: AlertDisposition): CareResult<TeacherAlertSummary>
     suspend fun saveDeliveryInternal(delivery: DeliveryRecord): CareResult<DeliveryRecord>
     suspend fun getDeliveryInternal(idempotencyKey: String): CareResult<DeliveryRecord>
 }

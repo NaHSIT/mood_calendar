@@ -9,6 +9,9 @@
 - 敏感答案、原始健康值、处置备注、退出审核和回执使用 Android Keystore AES-GCM，随机 nonce、AAD 和 `v1` 版本化密文；密钥缺失/篡改返回可解释失败，不清空数据库。
 - Room 从已核实的 v3 增量迁移到 v4；保留 `mood_records`、`anniversary_records`。未知 v1/v2 不做破坏性回退。
 - 干预启动与 AA 入库在同一 Room 事务中执行；活动 AA 通过 `(studentId,dataDomain,activeSlot)` 唯一索引及幂等键避免重复。
+- 修复补充：`StudentHealthRepository.deleteForCurrentStudent(scopes)` 真实删除本人/当前数据域内指定类型的原始样本并返回条数。
+- 修复补充：AA 退出申请校验可配置观察期、未完成任务及未处理安全关注；批准时事务内复查安全关注、更新状态并取消未来任务。
+- 修复补充：`AlertRepository.updateTeacherDisposition` 只允许责任教师按状态机推进告警，使安全关注可被审计地关闭，而非通过页面绕过。
 
 ## 公开接口与主要文件
 
@@ -23,8 +26,9 @@
 ## 验证
 
 - `gradlew.bat testDebugUnitTest --stacktrace`：主源码及 `compileDebugKotlin`、`compileDebugUnitTestKotlin` 已完成；测试执行器随后因本机 Gradle worker `worker.org.gradle.process.internal.worker.GradleWorkerMain` 类加载/管道异常失败，不是断言失败。
-- 修正仪器测试的 `RoomDatabase` 关闭方式后，尚未能重新运行完整 Android 测试编译：受限环境无法再次通过 Gradle wrapper 网络审批；直接调用本机 Gradle 发行版又缺少 `foojay-resolver-convention` 插件缓存。
-- 测试源码：`src/test/.../AccessPolicyTest.kt`、`src/androidTest/.../CareSecurityInstrumentedTest.kt`，覆盖越权、教师私有字段边界、GCM 篡改/AAD、v3 数据保留和 AA 重试幂等。
+- 修复后 `gradlew.bat :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:assembleDebug --no-daemon`：通过。
+- 修复后 JVM 测试执行器仍因同一 Gradle worker 类加载问题未进入断言；新增仪器测试已编译，但当前环境无 `adb`，未在设备执行。
+- 测试源码：`AccessPolicyTest.kt`、`CareSecurityInstrumentedTest.kt`、`CorePrivacyFixInstrumentedTest.kt`，覆盖越权、教师私有字段边界、GCM 篡改/AAD、v3 数据保留、AA 重试幂等、健康原始数据删除和 AA 退出守卫。
 
 ## 未完成项与边界
 
