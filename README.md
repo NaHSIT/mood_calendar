@@ -1,22 +1,160 @@
-# 心情日历 Mood Calendar
+# 心情日历 · Mood Calendar
 
-Android 原生心情记录原型，使用 Kotlin、Jetpack Compose、Room。当前包括日历、图文记录、心情统计、天气、纪念日和个性化设置。
+使用 **Kotlin、Jetpack Compose、Room** 构建的 Android 原生应用，将日常心情记录与校园照护原型结合：记录感受、填写量表、管理健康数据授权，并通过教师干预与 AA 随访连接后续关怀。
 
-校园量表、健康数据授权、教师预警和 AA 随访为待开发功能，不能将任务书视为已实现能力。当前关键词心理分析也不是临床诊断功能。
+**当前状态：已完成模块集成、首轮闭环和界面优化，并在 Android 16 真机上通过回归测试。** 校园照护使用演示身份、模拟健康数据和本地模拟学校平台，尚不是可直接部署到学校的生产系统。量表用于筛查，应用分析与预警不构成临床诊断。
 
-## 开发入口
+[功能测试报告](docs/testing/2026-09-18-功能测试报告.md) · [UI 优化与验收](docs/testing/2026-09-18-UI优化验收.md) · [产品需求](Mood_Calendar_PRD.md)
+
+## 界面预览
+
+以下为 Android 16 真机截图；健康数据页与教师入口均为演示模式。
+
+<table>
+  <tr><th>校园照护</th><th>量表评估</th><th>教师工作台</th></tr>
+  <tr>
+    <td><img src="docs/testing/evidence-ui-2026-09-18/care-hub.png" width="240" alt="校园照护：量表主入口、健康授权与随访卡片"></td>
+    <td><img src="docs/testing/evidence-ui-2026-09-18/assessment.png" width="240" alt="量表评估：填写进度、题号和整行单选"></td>
+    <td><img src="docs/testing/evidence-ui-2026-09-18/teacher.png" width="240" alt="教师工作台：关注事件概览、分类和空状态"></td>
+  </tr>
+</table>
+
+更多预览：[健康授权](docs/testing/evidence-ui-2026-09-18/health.png) · [AA 随访](docs/testing/evidence-ui-2026-09-18/followup.png)。
+
+## 功能与实现状态
+
+| 模块 | 当前能力 | 边界 |
+|---|---|---|
+| 心情日历 | 日历浏览、图文记录、心情统计、天气、纪念日与个性化设置 | 本轮重点验收新增照护链路，原有功能尚未完成全部交互回归 |
+| 学生量表 | PHQ-9 / GAD-7 填写、进度与题号、评分、草稿状态恢复、提交防重、安全题提醒 | 历史量表列表与日历日期联动待完善 |
+| 健康接入框架 | 心率/睡眠分别授权、撤回、演示数据同步、本人查看和按范围删除原始数据 | 未读取真实手环或手机健康库 |
+| 风险评估 | 量表作为核心依据，生理信号作为辅助；关注分级、安全复核标签、预警去重 | 使用演示规则；生理异常不会独立把低分量表抬高为预警 |
+| 教师工作台 | 责任范围内的预警摘要、确认、启动干预、加密处理记录、结束干预、退出审核 | 演示教师身份，不包含真实学校认证 |
+| AA 随访 | 干预后自动入库并创建首轮任务；打卡、关联已保存量表的复测、教师联系、退出条件校验 | 连续多周滚动调度和到期通知尚未完整接入主应用 |
+| 学校平台接口 | 最小化事件 DTO、模拟回执、持久化待投递记录、应用前台重试 | 没有真实平台推送，也不保证应用被终止后的后台送达 |
+
+目前可验证的首轮流程：
+
+```text
+学生填写量表 → 量表评估 + 已授权的生理辅助信号 → 分级预警
+    → 教师确认与干预 → 自动进入 AA 随访并生成首轮任务
+    → 打卡 / 复测 / 教师联系 → 满足条件后申请退出 → 教师审核
+```
+
+结束一次教师干预不会自动退出 AA；后续随访与退出审核分别处理。量表缺失或过期会标记数据不足；生理辅助读取失败时，仍可继续量表评估。
+
+## 隐私与数据边界
+
+- 原始健康数据仅通过学生本人接口读取；教师端取得代号、关注等级、必要标签与处置状态，不展示原始生理序列、逐题答案或日记。
+- 仓库层校验学生归属、教师责任范围和数据域；演示数据与真实数据域分开。
+- 使用 Android Keystore 与 AES-GCM 加密敏感字段，并绑定记录上下文；这不等同于整个数据库文件加密。
+- 心率和睡眠授权默认关闭，可分别撤回。授权版本与最终入库检查用于拒绝撤回后的迟到回调。
+- 撤回授权停止后续同步；删除历史原始数据是独立操作，也不会收回教师已经看到的最小化历史摘要。
+
+当前身份切换用于原型演示，不能替代生产认证和服务端授权。请勿将真实学生数据、个人密钥或本机配置提交到仓库。
+
+## 本地运行
+
+### 环境
+
+以仓库配置为准：
+
+| 项目 | 配置 |
+|---|---|
+| Gradle Wrapper | 9.3.1 |
+| Android Gradle Plugin | 9.1.1 |
+| Gradle 守护进程 | JDK 21，见 `gradle/gradle-daemon-jvm.properties` |
+| 代码编译工具链 | JDK 11，Java 兼容目标 11，见 `app/build.gradle.kts` |
+| Android SDK | compileSdk 37 / targetSdk 37 / minSdk 24 |
+| 应用包名 | `com.example.mdd_calender` |
+
+1. 克隆仓库，用支持项目 AGP 配置的 Android Studio 打开根目录。
+2. 在 SDK Manager 中准备 Android SDK Platform 37 和 Platform Tools；配置本机 SDK 路径，`local.properties` 不提交。
+3. 准备 JDK 21 与编译工具链 JDK 11，完成 Gradle 同步。项目已配置工具链解析器，首次同步可能需要下载工具链及依赖。
+4. 选择 `app`，运行到 Android 设备或模拟器。
+
+```bash
+git clone https://github.com/NaHSIT/mood_calendar.git
+cd mood_calendar
+```
+
+Windows PowerShell 构建：
+
+```powershell
+.\gradlew.bat :app:assembleDebug
+```
+
+macOS / Linux 使用 `./gradlew :app:assembleDebug`。首次使用时如脚本没有执行权限，先执行 `chmod +x gradlew`。
+
+生成的安装包位于 `app/build/outputs/apk/debug/app-debug.apk`。仓库保存源代码、测试和文档，构建缓存、签名密钥及生成的 APK 不作为源码提交。
+
+### 手机安装与调试
+
+开启手机开发者选项与 USB 调试，接受电脑调试授权。以下命令假设 `adb` 已加入 PATH：
+
+```powershell
+adb devices
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n com.example.mdd_calender/.MainActivity
+```
+
+`-r` 用于覆盖安装并保留应用数据。部分手机还需开启“USB 安装”；自动化点击可能需要单独开启“USB 调试（安全设置）”。真机 UI 测试期间保持设备解锁，允许系统出现的测试应用启动提示。
+
+## 测试与验证
+
+**2026-09-18，代码基线 `cb6e6b9`：**
+
+| 检查 | 结果 |
+|---|---|
+| Debug 应用与测试 APK 构建 | 通过 |
+| JVM 单元测试 | 60 / 60 通过 |
+| Android 真机测试 | 13 / 13 通过，其中 3 项为 Compose UI 测试 |
+| Android Lint | 0 错误、60 警告 |
+| 真机环境 | 23113RKC6C，Android 16 |
+
+共 73 个测试方法，包含 2 个模板测试。业务/UI 用例覆盖量表提交、预警生成、教师连续操作、AA 首轮任务、授权撤回竞态、加密/权限隔离、迁移和模拟投递恢复。测试数据使用独立数据库；单台设备通过不代表全部 Android 版本、字体大小或无障碍场景已经验收。
+
+```powershell
+# 本地单元测试、构建与静态检查
+.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug
+
+# 已连接并解锁的设备上执行真机测试
+.\gradlew.bat :app:connectedDebugAndroidTest
+```
+
+日志与具体测试步骤：[分模块功能报告](docs/testing/2026-09-18-功能测试报告.md)、[界面改版回归报告](docs/testing/2026-09-18-UI优化验收.md)、[真机运行日志](docs/testing/evidence-ui-2026-09-18/instrumentation.log)。历史报告中的提交/安装状态以当次验收时间为准。
+
+## 项目结构
+
+```text
+app/src/main/java/com/example/mdd_calender/
+├── data/            # Room 数据库、仓库与持久化
+├── domain/          # 公共模型、接口与策略
+├── feature/         # assessment / health / risk / teacher / followup
+├── integration/     # 应用服务编排与学校平台接口
+├── security/        # 会话与敏感字段加密
+└── ui/              # 日历等页面、导航、主题和公共组件
+app/src/test/        # JVM 单元测试
+app/src/androidTest/ # 真机业务、安全、迁移与 Compose UI 测试
+docs/tasks/          # 模块任务书、契约和交接记录
+docs/testing/        # 测试报告、日志与真机截图
+```
+
+## 协作开发
+
+`main` 保存已合并的验证基线，`develop` 用于集成，功能变更在独立分支中完成。多个窗口开发时使用独立 worktree，遵守公共契约，避免同时修改同一组文件。合并前检查构建、受影响功能和必要回归。
 
 - [协同开发总则](docs/tasks/00-协同开发总则.md)
 - [模块分支与窗口启动](docs/tasks/09-Git分支与窗口启动.md)
-- [公共接口约定](docs/tasks/08-公共接口与业务约定.md)
-- [原始产品需求](Mood_Calendar_PRD.md)
+- [公共接口与业务约定](docs/tasks/08-公共接口与业务约定.md)
+- [全分支合并记录](docs/tasks/10-全分支合并记录.md)
 
-用 Android Studio 打开工作目录，配置本机 Android SDK；`local.properties` 不提交。Gradle 版本及工具链以项目配置为准。本次仓库准备不代表已经通过构建或真机验证。
+任务书记录规划，实际完成情况以代码及对应版本的测试报告为准。
 
-```powershell
-.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug
-```
+## 后续工作
 
-## 分支原则
-
-`main` 保存经确认的基线，`develop` 汇总模块，模块通过 PR 合入 develop。先合并公共契约，再并行实现功能，最后集成验收。各窗口使用独立 worktree，禁止提交真实学生数据、密钥或本机配置。
+- 接入 AA 周期任务持久化调度、下一轮任务生成与到期通知。
+- 完善量表历史查看、日历日期联动及原有日历功能全量回归。
+- 统一教师退出审核入口，补齐永久投递失败的人工处理和后台恢复。
+- 接入真实学校身份认证、服务端权限校验、学校心理平台与通知渠道。
+- 后续版本再接真实手环或手机健康数据；扩充机型、生命周期、深色主题与无障碍验证。
