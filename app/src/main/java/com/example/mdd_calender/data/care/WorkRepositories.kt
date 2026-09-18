@@ -310,6 +310,7 @@ class RoomFollowUpRepository(
         val actor = when (val result = session.actorWithRole(ActorRole.STUDENT)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
         if (reason.isBlank()) return CareResult.Failure(CareFailure.InvalidInput("Exit reason is required"))
         val entity = dao.activeEnrollment(actor.actorId, actor.dataDomain.name) ?: return CareResult.Failure(CareFailure.NotFound("active AA enrollment", actor.actorId))
+        if (entity.status != AaStatus.TRACKING.name) return CareResult.Failure(CareFailure.Conflict("Exit request is already pending or tracking has ended"))
         val now = clock.nowEpochMillis()
         if (now - entity.enrolledAtEpochMillis < exitPolicy.minimumObservationMillis) {
             return CareResult.Failure(CareFailure.Conflict("Minimum AA observation period has not been met"))

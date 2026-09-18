@@ -151,6 +151,7 @@ class MoodViewModel(
 
     fun saveMoodWithContent(id: Int = 0, date: String, time: String, moodType: String, content: String?, imageUris: String?) {
         viewModelScope.launch {
+            val now = System.currentTimeMillis()
             val record = MoodRecord(
                 id = id,
                 date = date,
@@ -159,8 +160,8 @@ class MoodViewModel(
                 note = null,
                 content = content,
                 imageUris = imageUris,
-                createdAt = if (id == 0) System.currentTimeMillis() else System.currentTimeMillis(), // We could fetch old createdAt if needed
-                updatedAt = System.currentTimeMillis()
+                createdAt = resolveCreatedAt(id, _selectedDateRecords.value, now),
+                updatedAt = now
             )
             repository.saveMoodRecord(record)
         }
@@ -196,6 +197,9 @@ class MoodViewModel(
         }
     }
 }
+
+internal fun resolveCreatedAt(id: Int, records: List<MoodRecord>, now: Long): Long =
+    if (id == 0) now else records.firstOrNull { it.id == id }?.createdAt ?: now
 
 val LocalDate.yearMonth: YearMonth
     get() = YearMonth.of(this.year, this.month)

@@ -262,7 +262,17 @@ class RoomStudentHealthRepository(
         if (consent.state != ConsentState.GRANTED.name || consent.revision != request.consentRevision) {
             return CareResult.Failure(CareFailure.Conflict("Consent was revoked or revised"))
         }
-        return decodeAll(dao.samples(request.studentId, actor.dataDomain.name, request.fromEpochMillis, request.toEpochMillis))
+        val decoded = when (val result = decodeAll(dao.samples(request.studentId, actor.dataDomain.name, request.fromEpochMillis, request.toEpochMillis))) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
+        val allowedTypes = request.scopes.flatMap {
+            when (it) {
+                HealthScope.HEART_RATE -> listOf(HealthSampleType.HEART_RATE_BPM)
+                HealthScope.SLEEP -> listOf(HealthSampleType.SLEEP_DURATION_MINUTES, HealthSampleType.SLEEP_QUALITY)
+            }
+        }.toSet()
+        return CareResult.Success(decoded.filter { it.consentRevision == request.consentRevision && it.type in allowedTypes })
     }
 
     private fun decodeAll(entities: List<HealthSampleEntity>): CareResult<List<RawHealthSample>> {

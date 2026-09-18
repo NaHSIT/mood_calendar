@@ -12,11 +12,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,8 +33,6 @@ import com.example.mdd_calender.ui.components.MoodType
 import com.example.mdd_calender.ui.components.MoodVectorIcon
 import com.example.mdd_calender.ui.components.glassmorphicCard
 import com.example.mdd_calender.ui.theme.getWeatherColors
-import com.example.mdd_calender.utils.CognitivePsychoAnalyzer
-import com.example.mdd_calender.utils.RiskLevel
 import java.time.format.DateTimeFormatter
 import java.time.LocalDate
 import coil.compose.AsyncImage
@@ -64,9 +61,6 @@ fun AnalysisScreen(
     val moodCounts = monthlyRecords.groupingBy { it.moodType }.eachCount()
     val sortedMoods = moodCounts.entries.sortedByDescending { it.value }
     val dominantMood = sortedMoods.firstOrNull()?.key?.let { MoodType.fromLabel(it) }
-
-    // Psychological Analysis
-    val psychoReport = remember(monthlyRecords) { CognitivePsychoAnalyzer.analyze(monthlyRecords) }
 
     Box(
         modifier = Modifier
@@ -98,7 +92,7 @@ fun AnalysisScreen(
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = weatherColors.textPrimary)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = weatherColors.textPrimary)
                 }
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -146,13 +140,13 @@ fun AnalysisScreen(
                 Tab(
                     selected = selectedTabIndex == 1,
                     onClick = { selectedTabIndex = 1 },
-                    text = { Text("🏥 深度洞察", fontWeight = FontWeight.Bold) }
+                    text = { Text("📋 量表评估", fontWeight = FontWeight.Bold) }
                 )
             }
             
             Spacer(modifier = Modifier.height(24.dp))
 
-            if (totalRecords == 0) {
+            if (selectedTabIndex == 0 && totalRecords == 0) {
                 // Empty State
                 Box(modifier = Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
                     Text(
@@ -333,22 +327,14 @@ fun AnalysisScreen(
                         }
                     }
                     1 -> {
-                        // Psychological Insight Panel
                         Text(
-                            "深度情绪洞察 (CBT医学模型)",
+                            "量表评估",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 color = weatherColors.textPrimary,
                                 fontWeight = FontWeight.Bold
                             ),
                             modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)
                         )
-
-                        val riskColor = when (psychoReport.riskLevel) {
-                            RiskLevel.LOW -> Color(0xFF4CAF50)
-                            RiskLevel.MEDIUM -> Color(0xFFFF9800)
-                            RiskLevel.HIGH -> Color(0xFFE53935)
-                            RiskLevel.CRISIS -> Color(0xFFD32F2F)
-                        }
 
                         Box(
                             modifier = Modifier
@@ -357,146 +343,33 @@ fun AnalysisScreen(
                                 .padding(24.dp)
                         ) {
                             Column {
-                                // Title and Status
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = if (psychoReport.riskLevel == RiskLevel.HIGH || psychoReport.riskLevel == RiskLevel.CRISIS) Icons.Default.Warning else Icons.Default.Favorite,
-                                        contentDescription = null,
-                                        tint = riskColor,
+                                        imageVector = Icons.AutoMirrored.Filled.Assignment,
+                                        contentDescription = "量表待评估",
+                                        tint = weatherColors.textPrimary,
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        text = psychoReport.summary,
+                                        text = "待评估",
                                         style = MaterialTheme.typography.titleMedium.copy(
                                             fontWeight = FontWeight.Bold,
-                                            color = riskColor
+                                            color = weatherColors.textPrimary
                                         )
                                     )
                                 }
-
-                                // Empathy & Comfort Section
-                                if (psychoReport.comfortMessage != null) {
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(riskColor.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
-                                            .padding(16.dp)
-                                    ) {
-                                        Text(
-                                            text = "“${psychoReport.comfortMessage}”",
-                                            style = MaterialTheme.typography.bodyLarge.copy(
-                                                color = weatherColors.textPrimary,
-                                                lineHeight = 24.sp,
-                                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-                                            )
-                                        )
-                                    }
-                                }
-                                
-                                // Cognitive Distortions
-                                if (psychoReport.identifiedDistortions.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text(
-                                        "💡 识别到的认知扭曲：",
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            color = weatherColors.textPrimary,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        psychoReport.identifiedDistortions.joinToString("、"),
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            color = weatherColors.textPrimary.copy(alpha = 0.8f)
-                                        )
-                                    )
-                                }
-
-                                // Clinical Syndrome Suspicions (NEW)
-                                if (psychoReport.suspectedDisorders.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Color(0xFFFFCC80).copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                                            .padding(16.dp)
-                                    ) {
-                                        Column {
-                                            Text(
-                                                "⚠️ 临床初筛倾向 (基于 NLP 模型)：",
-                                                style = MaterialTheme.typography.labelLarge.copy(
-                                                    color = Color(0xFFE65100),
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            psychoReport.suspectedDisorders.forEach { disorder ->
-                                                Text(
-                                                    "- $disorder",
-                                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                                        color = Color(0xFFE65100).copy(alpha = 0.9f),
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Advice
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    "💬 干预建议：",
-                                    style = MaterialTheme.typography.labelLarge.copy(
-                                        color = weatherColors.textPrimary,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    psychoReport.advice,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                    "情绪日记只用于个人记录，不会根据关键词推断疾病或关注等级。完成规范量表后，这里将显示量表结果与数据充分性。",
+                                    style = MaterialTheme.typography.bodyLarge.copy(
                                         color = weatherColors.textPrimary.copy(alpha = 0.8f),
-                                        lineHeight = 22.sp
+                                        lineHeight = 24.sp
                                     )
                                 )
-
-                                // Medical Referral (CRISIS / HIGH)
-                                if (psychoReport.medicalReferral != null) {
-                                    Spacer(modifier = Modifier.height(24.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .glassmorphicCard(cornerRadius = 16.dp, surfaceAlpha = 0.2f, shadowElevation = 0.dp)
-                                            .background(Color(0xFFFFEBEE).copy(alpha = 0.3f))
-                                            .padding(16.dp)
-                                    ) {
-                                        Column {
-                                            Text(
-                                                "🆘 医疗干预指引",
-                                                style = MaterialTheme.typography.titleSmall.copy(
-                                                    color = Color(0xFFD32F2F),
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text(
-                                                psychoReport.medicalReferral,
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    color = weatherColors.textPrimary,
-                                                    lineHeight = 20.sp
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Legal Disclaimer
                                 Spacer(modifier = Modifier.height(24.dp))
                                 Text(
-                                    "* 本分析基于认知行为模型，由本地算法自动生成，绝对保护隐私。仅供心理探索参考，不替代专业医疗诊断。",
+                                    "量表用于筛查和自我了解，不是临床诊断。如有紧急安全顾虑，请立即联系当地紧急服务或可信任的专业人员。",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         color = weatherColors.textPrimary.copy(alpha = 0.5f)
                                     )
