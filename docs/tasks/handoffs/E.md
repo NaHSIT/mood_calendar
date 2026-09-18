@@ -14,6 +14,7 @@ A 的公共契约已合入 `develop`（基线 `e9deed5`），窗口 E 已完成�
 - 干预启动调用 A 的 `InterventionRepository.startWithAa`，由公共事务能力保证干预与 AA 原子入库；重复幂等键返回已有结果。
 - 消息箱状态由告警白名单摘要与责任教师干预状态派生，避免自行修改告警领域存储。
 - 模拟网关支持成功、待重试、永久失败、幂等回执查询四种演示结果，始终标记 `simulated=true`。
+- 修复教师端缺少 AA 退出审核入口：只列出责任范围内的待审核档案，展示申请理由，审核备注必填，并支持批准/驳回及最小审计。
 
 ## 修改文件
 
@@ -40,6 +41,7 @@ A 的公共契约已合入 `develop`（基线 `e9deed5`），窗口 E 已完成�
 - `acknowledge(caseId)`：责任教师鉴权、幂等确认和审计。
 - `startIntervention(caseId, policyVersion)`：必要时先确认，再调用 `startWithAa`。
 - `simulateDelivery(eventId)`：白名单 DTO + 幂等键投递，不发送真实平台消息。
+- `loadPendingExitReviews/reviewExit`：调用 A 的 `FollowUpRepository`，不由 UI 构造教师权限或直接修改 AA 状态。
 
 ## 验证
 
@@ -47,6 +49,8 @@ A 的公共契约已合入 `develop`（基线 `e9deed5`），窗口 E 已完成�
 - `git merge --no-edit origin/develop`：成功合入 A 契约，产生本地合并提交。
 - `gradlew.bat :app:compileDebugKotlin`：通过。
 - `gradlew.bat :app:assembleDebug --no-daemon --max-workers=1`：通过。
+- `gradlew.bat :app:compileDebugUnitTestKotlin :app:assembleDebug --no-daemon --max-workers=1`：通过，新增退出审核测试源码编译成功，APK 重新生成。
+- 定向运行 `TeacherExitReviewTest`：测试执行器仍因本机 `GradleWorkerMain` 缺失而无法启动，未声明测试通过。
 - `gradlew.bat :app:testDebugUnitTest --no-daemon --max-workers=1`：测试源码编译通过，但执行器启动失败：`ClassNotFoundException: worker.org.gradle.process.internal.worker.GradleWorkerMain`；未声明测试通过。
 
 ## 未完成项
@@ -54,6 +58,7 @@ A 的公共契约已合入 `develop`（基线 `e9deed5`），窗口 E 已完成�
 - G 尚需把 `TeacherWorkbenchRoute` 接入导航和可信教师会话/仓储装配。
 - 当前模拟投递记录保存在网关实例内存；正式持久投递队列仍需 A/G 提供应用启动恢复与 `saveDeliveryInternal` 系统通道装配。
 - 测试执行器环境需修复后重新运行单元测试。
+- A/F 仍需在业务层保证批准退出前重新校验稳定观察和未处理安全关注，并在批准后取消未来未执行任务；E 页面已明确提示该边界，不能替代后端约束。
 
 ## 依赖请求与后续步骤
 
