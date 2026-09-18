@@ -1,6 +1,8 @@
 package com.example.mdd_calender.feature.teacher
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,6 +44,7 @@ fun TeacherWorkbenchRoute(viewModel: TeacherWorkbenchViewModel) {
             onAcknowledge = { viewModel.acknowledge(it) },
             onStart = { viewModel.start(it) },
             onSimulateDelivery = { viewModel.simulateDelivery(it) },
+            onClose = viewModel::close,
         )
     }
 }
@@ -88,9 +91,9 @@ fun TeacherInboxScreen(
                 Card(Modifier.fillMaxWidth().clickable { onOpen(item.summary.eventId) }) {
                     Column(Modifier.padding(16.dp)) {
                         Text("学生代号：${item.summary.studentCode}", style = MaterialTheme.typography.titleMedium)
-                        Text("关注等级：${item.summary.concernLevel}")
-                        Text("状态：${item.summary.disposition}")
-                        Text("原因：${item.summary.minimalReasonTags.joinToString("、")}")
+                        Text("关注等级：${item.summary.concernLevel.label()}")
+                        Text("状态：${item.summary.disposition.label()}")
+                        Text("原因：${item.summary.minimalReasonTags.joinToString("、", transform = ::reasonLabel)}")
                     }
                 }
             }
@@ -136,21 +139,28 @@ fun TeacherAlertDetailScreen(
     onAcknowledge: (String) -> Unit,
     onStart: (String) -> Unit,
     onSimulateDelivery: (String) -> Unit,
+    onClose: (String, String) -> Unit = { _, _ -> },
 ) {
     val item = details.item
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    var note by remember(item.summary.eventId) { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("预警详情", style = MaterialTheme.typography.headlineSmall)
         Text("学生代号：${item.summary.studentCode}")
-        Text("关注等级：${item.summary.concernLevel}")
-        Text("最少必要原因：${item.summary.minimalReasonTags.joinToString("、")}")
-        Text("处置状态：${item.summary.disposition}")
+        Text("关注等级：${item.summary.concernLevel.label()}")
+        Text("最少必要原因：${item.summary.minimalReasonTags.joinToString("、", transform = ::reasonLabel)}")
+        Text("处置状态：${item.summary.disposition.label()}")
         Text("仅显示教师工作摘要；不包含逐题答案、日记或原始健康数据。", style = MaterialTheme.typography.bodySmall)
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         item.intervention?.let { intervention ->
             when (intervention.status) {
                 InterventionStatus.PENDING_CONFIRMATION -> Button(onClick = { onAcknowledge(intervention.caseId) }) { Text("确认预警") }
                 InterventionStatus.CONFIRMED -> Button(onClick = { onStart(intervention.caseId) }) { Text("启动干预") }
-                else -> Text("干预状态：${intervention.status}")
+                InterventionStatus.ACTIVE, InterventionStatus.PENDING_CLOSURE -> {
+                    OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("联系及处理记录（必填）") }, modifier = Modifier.fillMaxWidth())
+                    Button(onClick = { onClose(intervention.caseId, note) }, enabled = note.isNotBlank()) { Text("记录处理并结束本次干预") }
+                    Text("结束本次干预后仍保留 AA 随访，退出须另行审核。", style = MaterialTheme.typography.bodySmall)
+                }
+                else -> Text("本次干预已结束")
             }
         } ?: Text("当前暂无可操作的干预记录")
         OutlinedButton(onClick = { onSimulateDelivery(item.summary.eventId) }) { Text("模拟平台投递") }
@@ -162,4 +172,28 @@ private fun filterLabel(filter: TeacherInboxFilter): String = when (filter) {
     TeacherInboxFilter.NEW -> "待确认"
     TeacherInboxFilter.IN_PROGRESS -> "处理中"
     TeacherInboxFilter.CLOSED -> "已结束"
+}
+
+private fun com.example.mdd_calender.domain.model.ConcernLevel.label() = when (this) {
+    com.example.mdd_calender.domain.model.ConcernLevel.LOW -> "低关注"
+    com.example.mdd_calender.domain.model.ConcernLevel.MILD -> "轻度关注"
+    com.example.mdd_calender.domain.model.ConcernLevel.MODERATE -> "中度关注"
+    com.example.mdd_calender.domain.model.ConcernLevel.HIGH -> "高度关注"
+    com.example.mdd_calender.domain.model.ConcernLevel.INSUFFICIENT_DATA -> "数据不足"
+}
+
+private fun AlertDisposition.label() = when (this) {
+    AlertDisposition.NEW -> "待确认"
+    AlertDisposition.ACKNOWLEDGED -> "已确认"
+    AlertDisposition.IN_PROGRESS -> "处理中"
+    AlertDisposition.CLOSED -> "已结束"
+}
+
+private fun reasonLabel(tag: String) = when (tag) {
+    "PHQ_9_MISSING_OR_EXPIRED" -> "PHQ-9 缺失或过期"
+    "GAD_7_MISSING_OR_EXPIRED" -> "GAD-7 缺失或过期"
+    "SAFETY_REVIEW_REQUIRED" -> "需及时人工安全复核"
+    "ELEVATED_HEART_RATE" -> "心率辅助异常信号"
+    "LOW_SLEEP" -> "睡眠辅助异常信号"
+    else -> "量表或辅助监测需复核"
 }

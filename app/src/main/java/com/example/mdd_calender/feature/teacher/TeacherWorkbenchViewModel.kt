@@ -67,7 +67,7 @@ class TeacherWorkbenchViewModel(
         viewModelScope.launch {
             when (val result = service.acknowledge(caseId)) {
                 is CareResult.Failure -> showFailure(result.error)
-                is CareResult.Success -> { _state.value = _state.value.copy(message = "已确认"); refresh() }
+                is CareResult.Success -> { refresh(); select(result.value.alertId) }
             }
         }
     }
@@ -77,6 +77,15 @@ class TeacherWorkbenchViewModel(
             when (val result = service.startIntervention(caseId, policyVersion)) {
                 is CareResult.Failure -> showFailure(result.error)
                 is CareResult.Success -> { _state.value = _state.value.copy(message = "干预已启动，AA 已入库"); refresh(); select(result.value.intervention.alertId) }
+            }
+        }
+    }
+
+    fun close(caseId: String, note: String) {
+        viewModelScope.launch {
+            when (val result = service.closeIntervention(caseId, note)) {
+                is CareResult.Failure -> showFailure(result.error)
+                is CareResult.Success -> { refresh(); select(result.value.alertId) }
             }
         }
     }

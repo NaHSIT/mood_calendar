@@ -43,6 +43,7 @@ class TeacherWorkbenchService(
     private val session: SessionProvider,
     private val audit: AuditRepository? = null,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val deliveryDispatcher: (suspend (String) -> CareResult<com.example.mdd_calender.domain.model.DeliveryRecord>)? = null,
 ) {
     suspend fun loadPendingExitReviews(): CareResult<List<TeacherExitReviewItem>> =
         when (val result = followUps.listAssignedEnrollments()) {
@@ -131,6 +132,16 @@ class TeacherWorkbenchService(
         }
     }
 
+    suspend fun closeIntervention(caseId: String, note: String): CareResult<InterventionCase> {
+        val actor = when (val result = session.currentActor()) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
+        val result = interventions.closeWithNote(caseId, note.trim())
+        if (result is CareResult.Success) recordAudit(actor.actorId, "teacher_close_intervention", caseId, "success")
+        return result
+    }
+
     suspend fun simulateDelivery(eventId: String): CareResult<com.example.mdd_calender.domain.model.DeliveryRecord> {
         val actor = when (val result = session.currentActor()) {
             is CareResult.Failure -> return result
@@ -148,7 +159,7 @@ class TeacherWorkbenchService(
             occurredAtEpochMillis = summary.occurredAtEpochMillis,
             simulated = true,
         )
-        val result = gateway.deliver(dto, "${summary.eventId}:${summary.occurredAtEpochMillis}")
+        val result = deliveryDispatcher?.invoke(eventId) ?: gateway.deliver(dto, "${summary.eventId}:${summary.occurredAtEpochMillis}")
         if (result is CareResult.Success) recordAudit(actor.actorId, "simulate_alert_delivery", eventId, result.value.status.name)
         return result
     }

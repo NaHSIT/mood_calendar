@@ -6,6 +6,11 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.mdd_calender.data.MoodDatabase
 import com.example.mdd_calender.data.care.RoomAlertRepository
+import com.example.mdd_calender.data.care.RoomAssessmentRepository
+import com.example.mdd_calender.feature.assessment.AssessmentScorer
+import com.example.mdd_calender.feature.assessment.AssessmentType
+import com.example.mdd_calender.feature.assessment.ScoreResult
+import com.example.mdd_calender.feature.assessment.toAssessmentRecord
 import com.example.mdd_calender.data.care.RoomCareAdministration
 import com.example.mdd_calender.data.care.RoomConsentRepository
 import com.example.mdd_calender.data.care.RoomFollowUpRepository
@@ -97,7 +102,11 @@ class CorePrivacyFixInstrumentedTest {
             assertTrue(studentFollowUp.requestExit("stable") is CareResult.Failure)
             now += 1
             assertTrue(studentFollowUp.requestExit("stable") is CareResult.Failure)
-            studentFollowUp.completeCurrentStudentTask("required-task", now)
+            assertTrue(studentFollowUp.completeCurrentStudentTask("required-task", now) is CareResult.Failure)
+            val score = AssessmentScorer.score(AssessmentType.PHQ_9, List(9) { 0 }) as ScoreResult.Complete
+            val assessment = score.toAssessmentRecord("exit-retake", "exit-student", "test", List(9) { 0 }, now)
+            assertTrue(RoomAssessmentRepository(db.careDao(), student, cipher).saveForCurrentStudent(assessment) is CareResult.Success)
+            assertTrue(studentFollowUp.completeAssessmentForCurrentStudent("required-task", assessment.assessmentId) is CareResult.Success)
             assertTrue(studentFollowUp.requestExit("stable") is CareResult.Failure)
             val teacherAlerts = RoomAlertRepository(db.careDao(), teacher, cipher)
             teacherAlerts.updateTeacherDisposition("exit-alert", AlertDisposition.ACKNOWLEDGED)

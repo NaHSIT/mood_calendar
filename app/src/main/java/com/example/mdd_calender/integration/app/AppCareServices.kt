@@ -45,6 +45,9 @@ import com.example.mdd_calender.integration.school.SimulatedSchoolPlatformGatewa
 import com.example.mdd_calender.domain.port.SchoolPlatformGateway
 import com.example.mdd_calender.security.AndroidKeystoreCipher
 import com.example.mdd_calender.security.DemoSessionProvider
+import com.example.mdd_calender.domain.model.DeliveryStatus
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Single composition root for care features.
@@ -52,8 +55,11 @@ import com.example.mdd_calender.security.DemoSessionProvider
  * The demo identity is deliberately fixed to the DEMO data domain. Production
  * authentication must replace [session] before any real student data is used.
  */
-class AppCareServices(context: Context) {
-    private val database = MoodDatabase.getDatabase(context.applicationContext)
+class AppCareServices(
+    context: Context,
+    private val database: MoodDatabase = MoodDatabase.getDatabase(context.applicationContext),
+    val schoolGateway: SchoolPlatformGateway = SimulatedSchoolPlatformGateway("demo-teacher"),
+) {
     val session: SessionProvider = DemoSessionProvider(
         ActorContext("demo-student", ActorRole.STUDENT, DataDomain.DEMO),
     )
@@ -83,7 +89,7 @@ class AppCareServices(context: Context) {
     private val systemEvaluations = RoomEvaluationRepository(database.careDao(), systemSession)
     private val systemAlerts = RoomAlertRepository(database.careDao(), systemSession, cipher)
     private val administration = RoomCareAdministration(database.careDao(), systemSession, cipher)
-    val schoolGateway: SchoolPlatformGateway = SimulatedSchoolPlatformGateway("demo-teacher")
+    private val deliveryMutex = Mutex()
     val teacherService = TeacherWorkbenchService(
         alerts = RoomAlertRepository(database.careDao(), teacherSession, cipher),
         interventions = RoomInterventionRepository(database, teacherSession, cipher),
@@ -91,6 +97,7 @@ class AppCareServices(context: Context) {
         gateway = schoolGateway,
         session = teacherSession,
         audit = RoomAuditRepository(database.careDao(), teacherSession),
+        deliveryDispatcher = { enqueueAndDeliver(it) },
     )
     val teacherFollowUp = RoomFollowUpRepository(database.careDao(), teacherSession, cipher)
 
@@ -116,7 +123,7 @@ class AppCareServices(context: Context) {
             is CareResult.Success -> result.value
         }
         val physiologySignals = when (val result = currentPhysiologySignals(record.studentId, evaluationAt)) {
-            is CareResult.Failure -> return result
+            is CareResult.Failure -> emptyList()
             is CareResult.Success -> result.value
         }
         val evaluation = when (val result = riskEvaluator.evaluate(
@@ -135,7 +142,7 @@ class AppCareServices(context: Context) {
             is CareResult.Failure -> return stored
             is CareResult.Success -> Unit
         }
-        val alert = AlertEventFactory.fromEvaluation(evaluation, studentCode = record.studentId) ?:
+        val alert = AlertEventFactory.fromEvaluation(evaluation, studentCode = "DEMO-001") ?:
             return CareResult.Success(CareChainReceipt(record.assessmentId, evaluation.evaluationId, null, null))
         when (val stored = systemAlerts.saveInternal(alert)) {
             is CareResult.Failure -> return stored
@@ -155,26 +162,57 @@ class AppCareServices(context: Context) {
             is CareResult.Failure -> if (intervention.error !is com.example.mdd_calender.domain.model.CareFailure.Conflict) return intervention
             is CareResult.Success -> Unit
         }
+        val deliveryRecord = when (val result = enqueueAndDeliver(alert.eventId)) {
+            is CareResult.Failure -> return result
+            is CareResult.Success -> result.value
+        }
+        return CareResult.Success(CareChainReceipt(record.assessmentId, evaluation.evaluationId, alert.eventId, deliveryRecord))
+    }
+
+    /** Durable local outbox: retry when the application returns to the foreground. */
+    suspend fun retryPendingDeliveries() {
+        for (pending in database.careDao().dueDeliveries(DataDomain.DEMO.name, System.currentTimeMillis())) {
+            enqueueAndDeliver(pending.alertId)
+        }
+    }
+
+    private suspend fun enqueueAndDeliver(eventId: String): CareResult<DeliveryRecord> = deliveryMutex.withLock {
+        val alert = database.careDao().alert(eventId, DataDomain.DEMO.name)
+            ?: return@withLock CareResult.Failure(com.example.mdd_calender.domain.model.CareFailure.NotFound("alert", eventId))
+        val existing = (systemAlerts.getDeliveryInternal(alert.deduplicationKey) as? CareResult.Success)?.value
+        if (existing?.status == DeliveryStatus.SIMULATED_DELIVERED || existing?.status == DeliveryStatus.FAILED ||
+            (existing?.nextRetryAtEpochMillis ?: 0) > System.currentTimeMillis()) return@withLock CareResult.Success(requireNotNull(existing))
+        val pending = existing ?: DeliveryRecord(
+            "delivery:$eventId", eventId, "demo-teacher", 0, null, true,
+            alert.deduplicationKey, DeliveryStatus.PENDING, null,
+        )
+        when (val saved = systemAlerts.saveDeliveryInternal(pending)) {
+            is CareResult.Failure -> return@withLock saved
+            is CareResult.Success -> Unit
+        }
         val delivery = schoolGateway.deliver(
             com.example.mdd_calender.domain.port.SchoolAlertDto(
                 eventId = alert.eventId,
                 studentCode = alert.studentCode,
-                concernLevel = alert.concernLevel.name,
-                minimalReasonTags = alert.minimalReasonTags,
+                concernLevel = alert.concernLevel,
+                minimalReasonTags = alert.minimalReasonTags.split(',').filter { it.isNotBlank() }.toSet(),
                 occurredAtEpochMillis = alert.occurredAtEpochMillis,
                 simulated = true,
             ),
             alert.deduplicationKey,
         )
+        val attempt = pending.attemptCount + 1
         val deliveryRecord = when (delivery) {
-            is CareResult.Failure -> return delivery
-            is CareResult.Success -> delivery.value
+            is CareResult.Failure -> pending.copy(
+                attemptCount = attempt,
+                status = if (attempt >= 3) DeliveryStatus.FAILED else DeliveryStatus.RETRY_PENDING,
+                nextRetryAtEpochMillis = if (attempt >= 3) null else System.currentTimeMillis() + 60_000,
+            )
+            is CareResult.Success -> if (attempt >= 3 && delivery.value.status == DeliveryStatus.RETRY_PENDING) {
+                delivery.value.copy(attemptCount = attempt, status = DeliveryStatus.FAILED, nextRetryAtEpochMillis = null)
+            } else delivery.value.copy(attemptCount = attempt)
         }
-        when (val stored = systemAlerts.saveDeliveryInternal(deliveryRecord)) {
-            is CareResult.Failure -> return stored
-            is CareResult.Success -> Unit
-        }
-        return CareResult.Success(CareChainReceipt(record.assessmentId, evaluation.evaluationId, alert.eventId, deliveryRecord))
+        systemAlerts.saveDeliveryInternal(deliveryRecord)
     }
 
     private suspend fun currentPhysiologySignals(

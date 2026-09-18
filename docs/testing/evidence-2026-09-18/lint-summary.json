@@ -1,0 +1,54 @@
+{
+  "errors": 0,
+  "warnings": 60,
+  "categories": [
+    {
+      "category": "Warning, AndroidGradlePluginVersion",
+      "count": 1
+    },
+    {
+      "category": "Warning, GradleDependency",
+      "count": 10
+    },
+    {
+      "category": "Warning, IconDipSize",
+      "count": 1
+    },
+    {
+      "category": "Warning, IconDuplicatesConfig",
+      "count": 1
+    },
+    {
+      "category": "Warning, IconExtension",
+      "count": 5
+    },
+    {
+      "category": "Warning, IconLauncherShape",
+      "count": 5
+    },
+    {
+      "category": "Warning, ModifierParameter",
+      "count": 1
+    },
+    {
+      "category": "Warning, NewerVersionAvailable",
+      "count": 7
+    },
+    {
+      "category": "Warning, RedundantLabel",
+      "count": 1
+    },
+    {
+      "category": "Warning, UnusedResources",
+      "count": 9
+    },
+    {
+      "category": "Warning, UseKtx",
+      "count": 10
+    },
+    {
+      "category": "Warning, UseTomlInstead",
+      "count": 9
+    }
+  ]
+}

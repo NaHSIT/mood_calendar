@@ -28,9 +28,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mdd_calender.domain.model.CareResult
@@ -80,22 +82,28 @@ fun CareHubScreen(
 
 @Composable
 fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, onBack: () -> Unit) {
-    var type by remember { mutableStateOf(AssessmentType.PHQ_9) }
-    val answers = remember(type) { mutableStateListOf<Int?>().apply { repeat(type.itemCount) { add(null) } } }
-    var message by remember { mutableStateOf<String?>(null) }
+    var type by rememberSaveable { mutableStateOf(AssessmentType.PHQ_9) }
+    var phqAnswers by rememberSaveable { mutableStateOf(List<Int?>(9) { null }) }
+    var gadAnswers by rememberSaveable { mutableStateOf(List<Int?>(7) { null }) }
+    val answers = if (type == AssessmentType.PHQ_9) phqAnswers else gadAnswers
+    var submissionId by rememberSaveable { mutableStateOf(UUID.randomUUID().toString()) }
+    var completedAt by rememberSaveable { mutableStateOf<Long?>(null) }
+    var submitted by rememberSaveable { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var message by rememberSaveable { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val descriptor = QuestionnaireCatalog.descriptor(type)
     val score = AssessmentScorer.score(type, answers.toList())
 
-    Scaffold(topBar = { TopAppBar(title = { Text("量表评估") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("量表评估") }, navigationIcon = { TextButton(onClick = onBack) { Text("返回") } }) }) { padding ->
         LazyColumn(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp).testTag("assessment-list"),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = type == AssessmentType.PHQ_9, onClick = { type = AssessmentType.PHQ_9 }, label = { Text("PHQ-9") })
-                    FilterChip(selected = type == AssessmentType.GAD_7, onClick = { type = AssessmentType.GAD_7 }, label = { Text("GAD-7") })
+                    FilterChip(enabled = !busy && completedAt == null, selected = type == AssessmentType.PHQ_9, onClick = { type = AssessmentType.PHQ_9 }, label = { Text("PHQ-9") })
+                    FilterChip(enabled = !busy && completedAt == null, selected = type == AssessmentType.GAD_7, onClick = { type = AssessmentType.GAD_7 }, label = { Text("GAD-7") })
                 }
                 Text(descriptor.recallPeriod, style = MaterialTheme.typography.bodySmall)
                 Text(descriptor.contentNotice, style = MaterialTheme.typography.bodySmall)
@@ -107,8 +115,13 @@ fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, o
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             descriptor.responseOptions.forEach { option ->
                                 FilterChip(
+                                    modifier = Modifier.testTag("answer-$index-${option.score}"),
                                     selected = answers[index] == option.score,
-                                    onClick = { answers[index] = option.score },
+                                    enabled = !busy && completedAt == null,
+                                    onClick = {
+                                        val updated = answers.toMutableList().also { it[index] = option.score }.toList()
+                                        if (type == AssessmentType.PHQ_9) phqAnswers = updated else gadAnswers = updated
+                                    },
                                     label = { Text("${option.score} ${option.label}") },
                                 )
                             }
@@ -125,20 +138,26 @@ fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, o
                     )
                 }
                 message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+                if (submitted && score is ScoreResult.Complete) Text("本次量表总分：${score.total}（筛查结果不构成诊断）")
                 Button(
-                    enabled = score is ScoreResult.Complete,
+                    enabled = score is ScoreResult.Complete && !busy && !submitted,
                     onClick = {
                         val complete = score as? ScoreResult.Complete ?: return@Button
+                        if (busy || submitted) return@Button
+                        busy = true
+                        if (completedAt == null) completedAt = System.currentTimeMillis()
                         scope.launch {
+                            try {
                             val record = complete.toAssessmentRecord(
-                                assessmentId = UUID.randomUUID().toString(),
+                                assessmentId = submissionId,
                                 studentId = "demo-student",
                                 instrumentVersion = descriptor.version,
                                 answers = answers.map { requireNotNull(it) },
-                                completedAtEpochMillis = System.currentTimeMillis(),
+                                completedAtEpochMillis = requireNotNull(completedAt),
                             )
                             message = when (services.submitAssessmentAndTriggerCare(record)) {
                                 is CareResult.Success -> {
+                                    submitted = true
                                     if (followUpTaskId != null) {
                                         val adapter = FollowUpRepositoryUiAdapter(services.followUp, services.assessments)
                                         when (adapter.completeAssessmentTask(followUpTaskId, record.assessmentId, System.currentTimeMillis())) {
@@ -147,12 +166,13 @@ fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, o
                                         }
                                     } else "已保存并完成评估链；有关注事件时已进入模拟投递。"
                                 }
-                                is CareResult.Failure -> "保存失败，请稍后重试。"
+                                is CareResult.Failure -> "流程未完成，点击提交可重试；已保存的量表不会重复新增。"
                             }
+                            } finally { busy = false }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("提交量表") }
+                ) { Text(if (busy) "提交中…" else if (submitted) "已提交" else "提交量表") }
                 Spacer(Modifier.height(20.dp))
                 OutlinedButton(onClick = onBack, Modifier.fillMaxWidth()) { Text("返回") }
             }
@@ -326,7 +346,7 @@ private fun TeacherExitReviewPanel(services: AppCareServices) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Button(onClick = {
                                         scope.launch {
-                                            message = when (val reviewed = services.teacherFollowUp.reviewExit(enrollment.enrollmentId, ExitReviewDecision.APPROVED, "责任教师批准")) {
+                                            message = when (val reviewed = services.teacherService.reviewExit(enrollment.enrollmentId, true, "责任教师批准")) {
                                                 is CareResult.Success -> "已批准退出，未来任务已取消。"
                                                 is CareResult.Failure -> (reviewed.error as? com.example.mdd_calender.domain.model.CareFailure.Conflict)?.reason ?: "批准失败。"
                                             }
@@ -335,7 +355,7 @@ private fun TeacherExitReviewPanel(services: AppCareServices) {
                                     }) { Text("批准") }
                                     OutlinedButton(onClick = {
                                         scope.launch {
-                                            message = when (services.teacherFollowUp.reviewExit(enrollment.enrollmentId, ExitReviewDecision.REJECTED, "继续观察")) {
+                                            message = when (services.teacherService.reviewExit(enrollment.enrollmentId, false, "继续观察")) {
                                                 is CareResult.Success -> "已驳回，学生继续随访。"
                                                 is CareResult.Failure -> "驳回失败。"
                                             }

@@ -14,12 +14,16 @@ interface InterventionRepository {
     suspend fun getAssignedToCurrentTeacher(caseId: String): CareResult<InterventionCase>
     suspend fun acknowledge(caseId: String, idempotencyKey: String): CareResult<InterventionCase>
     suspend fun startWithAa(request: InterventionStartRequest): CareResult<InterventionStartResult>
+    suspend fun closeWithNote(caseId: String, note: String): CareResult<InterventionCase> =
+        CareResult.Failure(com.example.mdd_calender.domain.model.CareFailure.NotConfigured("intervention closure"))
 }
 
 interface FollowUpRepository {
     suspend fun currentStudentEnrollment(): CareResult<AaEnrollment>
     suspend fun currentStudentTasks(): CareResult<List<FollowUpTask>>
     suspend fun completeCurrentStudentTask(taskId: String, completedAtEpochMillis: Long): CareResult<FollowUpTask>
+    suspend fun completeAssessmentForCurrentStudent(taskId: String, assessmentId: String): CareResult<FollowUpTask> =
+        CareResult.Failure(com.example.mdd_calender.domain.model.CareFailure.NotConfigured("verified reassessment"))
     suspend fun requestExit(reason: String): CareResult<AaEnrollment>
     suspend fun listAssignedEnrollments(): CareResult<List<AaEnrollment>>
     suspend fun reviewExit(enrollmentId: String, decision: ExitReviewDecision, note: String): CareResult<AaEnrollment>

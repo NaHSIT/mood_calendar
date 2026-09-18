@@ -163,10 +163,10 @@ class RoomConsentRepository(
             is CareResult.Success -> result.value
         }
         if (granted && scopes.isEmpty()) return CareResult.Failure(CareFailure.InvalidInput("At least one health scope is required when granting consent"))
-        val old = dao.consent(actor.actorId, actor.dataDomain.name)
-        val updated = HealthConsent(actor.actorId, if (granted) scopes else emptySet(), if (granted) ConsentState.GRANTED else ConsentState.REVOKED, (old?.revision ?: 0) + 1, clock.nowEpochMillis())
-        dao.upsertConsent(updated.toEntity(actor.dataDomain.name))
-        return CareResult.Success(updated)
+        val updated = dao.reviseConsent(actor.actorId, actor.dataDomain.name,
+            (if (granted) scopes else emptySet()).packed(),
+            if (granted) ConsentState.GRANTED.name else ConsentState.REVOKED.name, clock.nowEpochMillis())
+        return CareResult.Success(updated.toModel())
     }
 
     override fun observeForCurrentStudent(): Flow<CareResult<HealthConsent>> = flow {
@@ -213,7 +213,9 @@ class RoomStudentHealthRepository(
             }
             entities += sample.toEntity(actor.dataDomain.name, encrypted)
         }
-        dao.upsertSamples(entities)
+        if (!dao.saveSamplesIfAuthorized(actor.actorId, actor.dataDomain.name, entities)) {
+            return CareResult.Failure(CareFailure.Conflict("Consent changed before health data was stored"))
+        }
         return CareResult.Success(Unit)
     }
 

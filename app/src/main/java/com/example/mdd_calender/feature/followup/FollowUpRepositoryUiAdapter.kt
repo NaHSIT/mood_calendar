@@ -61,7 +61,7 @@ class FollowUpRepositoryUiAdapter(
         if (task.type != DomainTaskType.ASSESSMENT_RETAKE || task.studentId != record.studentId) {
             return CareResult.Failure(CareFailure.InvalidInput("Assessment does not match follow-up task"))
         }
-        return followUpRepository.completeCurrentStudentTask(taskId, completedAtEpochMillis)
+        return followUpRepository.completeAssessmentForCurrentStudent(taskId, assessmentId)
     }
 
     suspend fun requestExit(reason: String): CareResult<com.example.mdd_calender.domain.model.AaEnrollment> =
@@ -115,9 +115,10 @@ private fun DomainTask.toUi() = StudentFollowUpTaskUi(
         DomainTaskType.ASSESSMENT_RETAKE -> "完整量表复测"
         DomainTaskType.TEACHER_REVIEW -> "教师联系"
     },
-    dueLabel = "到期时间：$dueAtEpochMillis",
+    dueLabel = "到期时间：" + java.time.Instant.ofEpochMilli(dueAtEpochMillis)
+        .atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")),
     status = when (status) {
-        DomainTaskStatus.PENDING -> FollowUpTaskUiStatus.UPCOMING
+        DomainTaskStatus.PENDING -> if (dueAtEpochMillis < System.currentTimeMillis()) FollowUpTaskUiStatus.OVERDUE else FollowUpTaskUiStatus.UPCOMING
         DomainTaskStatus.COMPLETED -> FollowUpTaskUiStatus.COMPLETED
         DomainTaskStatus.OVERDUE -> FollowUpTaskUiStatus.OVERDUE
         DomainTaskStatus.CANCELLED -> FollowUpTaskUiStatus.CANCELLED

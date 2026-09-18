@@ -13,6 +13,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.Lifecycle
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import com.example.mdd_calender.data.MoodDatabase
 import com.example.mdd_calender.data.MoodRepository
 import com.example.mdd_calender.integration.app.AppCareServices
@@ -31,6 +36,14 @@ class MainActivity : ComponentActivity() {
         val repository = MoodRepository(db.moodDao(), db.anniversaryDao())
         val preferences = com.example.mdd_calender.data.MoodPreferences(applicationContext)
         val careServices = AppCareServices(applicationContext)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    careServices.retryPendingDeliveries()
+                    delay(60_000)
+                }
+            }
+        }
         
         setContent {
             Mdd_calenderTheme {

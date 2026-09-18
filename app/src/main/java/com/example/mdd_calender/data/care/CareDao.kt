@@ -33,7 +33,28 @@ interface CareDao {
     @Query("SELECT * FROM care_consents WHERE studentId=:studentId AND dataDomain=:domain")
     fun observeConsent(studentId: String, domain: String): Flow<ConsentEntity?>
 
+    @Transaction
+    suspend fun reviseConsent(studentId: String, domain: String, scopes: String, state: String, now: Long): ConsentEntity {
+        val old = consent(studentId, domain)
+        if (old != null && old.scopes == scopes && old.state == state) return old
+        return ConsentEntity(studentId, domain, scopes, state, (old?.revision ?: 0) + 1, now).also { upsertConsent(it) }
+    }
+
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertSamples(values: List<HealthSampleEntity>)
+
+    /** The final authorization check and write share a transaction, including late provider callbacks. */
+    @Transaction
+    suspend fun saveSamplesIfAuthorized(ownerId: String, domain: String, values: List<HealthSampleEntity>): Boolean {
+        val current = consent(ownerId, domain) ?: return false
+        if (current.state != "GRANTED") return false
+        val scopes = current.scopes.split(',').toSet()
+        if (values.any {
+                it.ownerId != ownerId || it.dataDomain != domain || it.consentRevision != current.revision ||
+                    (if (it.type == "HEART_RATE_BPM") "HEART_RATE" else "SLEEP") !in scopes
+            }) return false
+        upsertSamples(values)
+        return true
+    }
     @Query("SELECT * FROM care_health_samples WHERE ownerId=:ownerId AND dataDomain=:domain AND measuredAtEpochMillis BETWEEN :from AND :to ORDER BY measuredAtEpochMillis")
     suspend fun samples(ownerId: String, domain: String, from: Long, to: Long): List<HealthSampleEntity>
     @Query("SELECT * FROM care_health_samples WHERE sampleId=:id AND ownerId=:ownerId AND dataDomain=:domain")
@@ -63,6 +84,10 @@ interface CareDao {
     @Update suspend fun updateDelivery(value: DeliveryEntity)
     @Query("SELECT * FROM care_deliveries WHERE idempotencyKey=:key AND dataDomain=:domain")
     suspend fun deliveryByIdempotencyKey(key: String, domain: String): DeliveryEntity?
+    @Query("SELECT * FROM care_deliveries WHERE dataDomain=:domain AND status IN ('PENDING','RETRY_PENDING') AND (nextRetryAtEpochMillis IS NULL OR nextRetryAtEpochMillis<=:now)")
+    suspend fun dueDeliveries(domain: String, now: Long): List<DeliveryEntity>
+    @Query("SELECT * FROM care_deliveries WHERE alertId=:alertId AND dataDomain=:domain ORDER BY attemptCount DESC LIMIT 1")
+    suspend fun deliveryForAlert(alertId: String, domain: String): DeliveryEntity?
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertIntervention(value: InterventionEntity): Long
     @Update suspend fun updateIntervention(value: InterventionEntity)
@@ -88,6 +113,15 @@ interface CareDao {
     suspend fun tasksForStudent(studentId: String, domain: String): List<FollowUpTaskEntity>
     @Query("SELECT * FROM care_follow_up_tasks WHERE taskId=:id AND studentId=:studentId AND dataDomain=:domain")
     suspend fun taskForStudent(id: String, studentId: String, domain: String): FollowUpTaskEntity?
+
+    @Transaction
+    suspend fun ensureEnrollmentTasks(enrollment: AaEnrollmentEntity) {
+        val day = 24L * 60 * 60 * 1000
+        listOf(Triple("check-in", "CHECK_IN", 1), Triple("assessment-retake", "ASSESSMENT_RETAKE", 7), Triple("teacher-review", "TEACHER_REVIEW", 3))
+            .forEach { (suffix, kind, days) -> insertTask(FollowUpTaskEntity(
+                "${enrollment.enrollmentId}:$suffix", enrollment.studentId, enrollment.dataDomain, kind,
+                enrollment.enrolledAtEpochMillis + days * day, null, null, "PENDING")) }
+    }
     @Query("SELECT COUNT(*) FROM care_follow_up_tasks WHERE studentId=:studentId AND dataDomain=:domain AND type='ASSESSMENT_RETAKE' AND status='COMPLETED' AND completedAtEpochMillis>=:since")
     suspend fun completedAssessmentRetakeCount(studentId: String, domain: String, since: Long): Int
     @Query("SELECT COUNT(*) FROM care_alerts WHERE studentId=:studentId AND dataDomain=:domain AND minimalReasonTags LIKE '%SAFETY_REVIEW_REQUIRED%' AND disposition!='CLOSED'")
@@ -96,17 +130,54 @@ interface CareDao {
     suspend fun cancelOpenTasks(studentId: String, domain: String, taskPrefix: String): Int
 
     @Transaction
+    suspend fun completeTaskChecked(id: String, studentId: String, domain: String, kind: String, now: Long, assessmentId: String? = null): FollowUpTaskEntity? {
+        val task = taskForStudent(id, studentId, domain) ?: return null
+        if (task.type != kind || task.status == "CANCELLED") return null
+        if (task.status == "COMPLETED") return task
+        val enrollment = activeEnrollment(studentId, domain) ?: return null
+        if (task.dueAtEpochMillis < enrollment.enrolledAtEpochMillis) return null
+        if (kind == "ASSESSMENT_RETAKE") {
+            val evidence = assessmentId?.let { assessmentForOwner(it, studentId, domain) } ?: return null
+            val completed = evidence.completedAtEpochMillis ?: return null
+            if (evidence.state != "COMPLETED" || completed < enrollment.enrolledAtEpochMillis || completed > now) return null
+        }
+        val updated = task.copy(status = "COMPLETED", completedAtEpochMillis = now, relatedAssessmentId = assessmentId)
+        updateTask(updated)
+        return updated
+    }
+
+    /** A recent completed reassessment is evidence; elapsed time alone is not stability. */
+    suspend fun hasStableReassessment(studentId: String, domain: String, enrolledAt: Long, now: Long): Boolean {
+        val window = maxOf(enrolledAt, now - 14L * 24 * 60 * 60 * 1000)
+        val latest = completedAssessments(studentId, domain, window)
+            .filter { (it.completedAtEpochMillis ?: Long.MAX_VALUE) <= now }
+            .groupBy { it.type }.values.map { rows -> rows.maxBy { it.completedAtEpochMillis ?: 0 } }
+        return latest.isNotEmpty() && latest.all { it.totalScore < 10 } && tasksForStudent(studentId, domain).any {
+            it.type == "ASSESSMENT_RETAKE" && it.status == "COMPLETED" &&
+                it.relatedAssessmentId in latest.map { record -> record.assessmentId }
+        }
+    }
+
+    @Transaction
     suspend fun finalizeExitReview(
         enrollmentId: String,
         teacherId: String,
         domain: String,
         approved: Boolean,
         encryptedReview: String,
+        now: Long,
+        minimumObservationMillis: Long,
+        requireResolvedTasks: Boolean,
     ): Int {
         val current = enrollment(enrollmentId, domain) ?: return EXIT_NOT_FOUND
         if (!isAssigned(teacherId, current.studentId, domain)) return EXIT_FORBIDDEN
         if (current.status != "EXIT_REVIEW_PENDING") return EXIT_INVALID_STATE
         if (approved && unresolvedSafetyAlertCount(current.studentId, domain) > 0) return EXIT_SAFETY_BLOCKED
+        if (approved && (now - current.enrolledAtEpochMillis < minimumObservationMillis ||
+                !hasStableReassessment(current.studentId, domain, current.enrolledAtEpochMillis, now))) return EXIT_NOT_STABLE
+        if (approved && requireResolvedTasks && tasksForStudent(current.studentId, domain).any {
+                it.dueAtEpochMillis <= now && it.status !in setOf("COMPLETED", "CANCELLED")
+            }) return EXIT_TASKS_PENDING
 
         updateEnrollment(
             current.copy(
@@ -131,5 +202,7 @@ interface CareDao {
         const val EXIT_FORBIDDEN = 2
         const val EXIT_INVALID_STATE = 3
         const val EXIT_SAFETY_BLOCKED = 4
+        const val EXIT_NOT_STABLE = 5
+        const val EXIT_TASKS_PENDING = 6
     }
 }

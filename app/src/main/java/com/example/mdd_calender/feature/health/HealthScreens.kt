@@ -224,7 +224,7 @@ fun RawHealthDataScreen(
                 is RawHealthDataView.Data -> {
                     if (view.isDemo) NoticeCard("模拟数据", "以下曲线和列表均为虚构演示数据，不来自真实设备。")
                     if (view.samples.isEmpty()) {
-                        EmptyState("暂无数据", "已连接的数据源当前没有返回记录。")
+                        EmptyState("暂无数据", "当前没有已保存的原始数据；可返回健康数据管理查看授权状态。")
                     } else {
                         HealthSampleBars(view.samples)
                         view.samples.sortedByDescending { it.observedAtEpochMillis }.forEach { sample ->

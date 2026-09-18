@@ -1,0 +1,182 @@
+[
+  {
+    "suite": "com.example.mdd_calender.domain.policy.AccessPolicyTest",
+    "tests": 3,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "studentCannotReadAnotherStudentOrAnotherDomain",
+      "teacherNeverGetsPrivateStudentResources",
+      "internalChannelIsNotAvailableToTeacher"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.ExampleUnitTest",
+    "tests": 1,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "addition_isCorrect"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.assessment.AssessmentDraftTest",
+    "tests": 4,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "corruptSavedDraftIsRejected",
+      "restoredDraftCanBeCompletedAndScored",
+      "answeringIsImmutableAndProgressUsesAnsweredItems",
+      "clearingAnAnswerMakesDraftIncompleteAgain"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.assessment.AssessmentScoringTest",
+    "tests": 6,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "gad7_allBandBoundariesAreStable",
+      "invalidAnswerAndWrongLengthAreRejected",
+      "phq9ItemNineFlagsReviewWithoutChangingScore",
+      "missingItemsCannotProduceACompleteScore",
+      "gad7NeverUsesThePhq9SafetyFlag",
+      "phq9_allBandBoundariesAreStable"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.assessment.QuestionnaireCatalogTest",
+    "tests": 3,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "legacyIntegrationPropertyReadsTheReviewedItems",
+      "phq9ContainsNineAnswerableItemsAndSafetyItem",
+      "gad7ContainsSevenAnswerableItems"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.followup.FollowUpPolicyTest",
+    "tests": 4,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "newEnrollmentDoesNotReuseOldTaskKeys",
+      "exitRequiresObservationSafetyClearanceAndCompletedAssessments",
+      "eligibleOnlyMeansHumanMayReview_notAutomaticExit",
+      "planningIsDeterministicAndDeduplicatesOffsets"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.followup.FollowUpRepositoryUiAdapterTest",
+    "tests": 3,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "reviewRequiresNoteAndDelegatesDecision",
+      "teacherStateExposesPendingExitReviewAndReason",
+      "normalEnrollmentDoesNotShowReviewActions"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.followup.FollowUpServiceTest",
+    "tests": 10,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "duplicateInterventionAndRecoveryAreIdempotent",
+      "pauseAndResumeKeepTerminalTasksUntouched",
+      "differentAlertsForStudentReuseOneActiveEnrollment",
+      "overdueTaskCreatesContactNeedButDoesNotChangeAaRiskState",
+      "transferImmediatelyRevokesOldTeacherScope",
+      "transactionFailureCanBeRetriedWithoutPartialEnrollmentOrTasks",
+      "exitRejectsUnstableOrSafetyConcernThenSupportsRejectAndApprove",
+      "assessmentRequiresMatchingDurablySavedReceiptAndCompletionIsIdempotent",
+      "interventionAfterExitCreatesNewEnrollmentAndTasks",
+      "studentAndTeacherQueriesAreScopeLimited"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.health.HealthProvidersTest",
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "disconnectedProviderReturnsExplicitStateNotFakeEmptyData",
+      "demoProviderMarksEverySampleAsDemo"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.health.HealthSyncCoordinatorTest",
+    "tests": 7,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "realAndDemoDomainsCannotMix",
+      "unauthorizedMetricNeverCallsProvider",
+      "repeatedAuthorizationIsIdempotentAndClosedStateSurvivesNewCoordinator",
+      "reauthorizationCannotReviveOldTask",
+      "atomicPersistenceRejectsConsentChangeAfterCallbackCheck",
+      "lateCallbackAfterRevocationIsDiscarded",
+      "rawDataDeniesDifferentStudentInsteadOfReturningEmpty"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.health.RuleBasedPhysiologySignalExtractorTest",
+    "tests": 4,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "frozenDomainExtractorContractReturnsAuxiliarySignal",
+      "noDataIsDifferentFromNormalPattern",
+      "elevatedHeartRateProducesCoarseSimulatedSignal",
+      "lowQualityAndStaleDataDoNotProduceSignals"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.risk.RiskEvaluatorTest",
+    "tests": 7,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "query window starts fourteen days before evaluation",
+      "safety item creates prompt review even with low total",
+      "physiology does not raise low scale to alert",
+      "older valid scale is retained when latest scale is submitted",
+      "same input is deterministic",
+      "highest valid scale wins without adding",
+      "expired scales produce insufficient data"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.teacher.TeacherExitReviewTest",
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "pendingReviewsAreListedAndApprovalUsesResponsibleTeacherRepository",
+      "reviewNoteIsRequired"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.integration.school.SimulatedSchoolPlatformGatewayTest",
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "deliveryIsIdempotentAndReceiptCanBeQueried",
+      "retryAndPermanentFailureAreExplicitSimulationStates"
+    ]
+  },
+  {
+    "suite": "com.example.mdd_calender.ui.MoodViewModelIntegrationTest",
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "newRecordUsesCurrentTime",
+      "editingRecordPreservesOriginalCreatedAt"
+    ]
+  }
+]

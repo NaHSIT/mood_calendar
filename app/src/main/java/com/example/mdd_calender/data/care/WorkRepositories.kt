@@ -238,6 +238,7 @@ class RoomInterventionRepository(
                     ?: return@withTransaction if (dao.intervention(request.caseId, actor.dataDomain.name) != null) CareResult.Failure(CareFailure.Forbidden("Teacher is not responsible for this intervention")) else CareResult.Failure(CareFailure.NotFound("intervention", request.caseId))
                 val existingEnrollment = dao.activeEnrollment(original.studentId, actor.dataDomain.name)
                 if (original.lastIdempotencyKey == request.idempotencyKey && existingEnrollment != null) {
+                    dao.ensureEnrollmentTasks(existingEnrollment)
                     val intervention = when (val mapped = original.toModel(cipher)) { is CareResult.Failure -> return@withTransaction mapped; is CareResult.Success -> mapped.value }
                     val enrollment = when (val mapped = existingEnrollment.toModel(cipher)) { is CareResult.Failure -> return@withTransaction mapped; is CareResult.Success -> mapped.value }
                     return@withTransaction CareResult.Success(InterventionStartResult(intervention, enrollment, false))
@@ -252,6 +253,8 @@ class RoomInterventionRepository(
                 ).also {
                     created = dao.insertEnrollment(it) != -1L
                 }.let { if (created) it else dao.activeEnrollment(original.studentId, actor.dataDomain.name)!! }
+                dao.ensureEnrollmentTasks(enrollmentEntity)
+                dao.alert(original.alertId, actor.dataDomain.name)?.let { dao.updateAlert(it.copy(disposition = AlertDisposition.IN_PROGRESS.name)) }
                 val intervention = when (val mapped = updated.toModel(cipher)) { is CareResult.Failure -> return@withTransaction mapped; is CareResult.Success -> mapped.value }
                 val enrollment = when (val mapped = enrollmentEntity.toModel(cipher)) { is CareResult.Failure -> return@withTransaction mapped; is CareResult.Success -> mapped.value }
                 CareResult.Success(InterventionStartResult(intervention, enrollment, created))
@@ -265,6 +268,27 @@ class RoomInterventionRepository(
         val output = mutableListOf<InterventionCase>()
         for (value in values) when (val mapped = value.toModel(cipher)) { is CareResult.Failure -> return mapped; is CareResult.Success -> output += mapped.value }
         return CareResult.Success(output)
+    }
+
+    override suspend fun closeWithNote(caseId: String, note: String): CareResult<InterventionCase> {
+        val actor = when (val result = session.actorWithRole(ActorRole.TEACHER)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
+        if (note.isBlank()) return CareResult.Failure(CareFailure.InvalidInput("请填写联系及处理记录"))
+        val encrypted = when (val result = cipher.encrypt(note.utf8(), AndroidKeystoreCipher.aad("intervention", caseId))) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
+        return database.withTransaction {
+            val entity = dao.interventionForTeacher(caseId, actor.actorId, actor.dataDomain.name)
+                ?: return@withTransaction CareResult.Failure(CareFailure.Forbidden("Teacher is not responsible for this intervention"))
+            if (!dao.isAssigned(actor.actorId, entity.studentId, actor.dataDomain.name)) return@withTransaction CareResult.Failure(CareFailure.Forbidden("Teacher assignment changed"))
+            if (entity.status == InterventionStatus.CLOSED.name) return@withTransaction entity.toModel(cipher)
+            if (entity.status != InterventionStatus.ACTIVE.name) return@withTransaction CareResult.Failure(CareFailure.Conflict("请先启动干预"))
+            val updated = entity.copy(status = InterventionStatus.CLOSED.name, encryptedMinimalActionNote = encrypted)
+            dao.updateIntervention(updated)
+            dao.alert(entity.alertId, actor.dataDomain.name)?.let { dao.updateAlert(it.copy(disposition = AlertDisposition.CLOSED.name)) }
+            dao.activeEnrollment(entity.studentId, actor.dataDomain.name)?.let { enrollment ->
+                dao.ensureEnrollmentTasks(enrollment)
+                dao.completeTaskChecked("${enrollment.enrollmentId}:teacher-review", entity.studentId, actor.dataDomain.name, FollowUpTaskType.TEACHER_REVIEW.name, clock.nowEpochMillis())
+            }
+            updated.toModel(cipher)
+        }
     }
 }
 
@@ -300,9 +324,16 @@ class RoomFollowUpRepository(
         val actor = when (val result = session.actorWithRole(ActorRole.STUDENT)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
         val task = dao.taskForStudent(taskId, actor.actorId, actor.dataDomain.name)
             ?: return CareResult.Failure(CareFailure.NotFound("follow-up task", taskId))
-        if (task.status == FollowUpTaskStatus.CANCELLED.name) return CareResult.Failure(CareFailure.Conflict("Cancelled task cannot be completed"))
-        val updated = task.copy(completedAtEpochMillis = completedAtEpochMillis, status = FollowUpTaskStatus.COMPLETED.name)
-        dao.updateTask(updated)
+        if (task.type != FollowUpTaskType.CHECK_IN.name) return CareResult.Failure(CareFailure.Forbidden("此任务需量表复测或教师处理，不能直接打卡完成"))
+        val updated = dao.completeTaskChecked(taskId, actor.actorId, actor.dataDomain.name, task.type, clock.nowEpochMillis())
+            ?: return CareResult.Failure(CareFailure.Conflict("任务已取消或当前未处于随访中"))
+        return CareResult.Success(updated.toModel())
+    }
+
+    override suspend fun completeAssessmentForCurrentStudent(taskId: String, assessmentId: String): CareResult<FollowUpTask> {
+        val actor = when (val result = session.actorWithRole(ActorRole.STUDENT)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
+        val updated = dao.completeTaskChecked(taskId, actor.actorId, actor.dataDomain.name, FollowUpTaskType.ASSESSMENT_RETAKE.name, clock.nowEpochMillis(), assessmentId)
+            ?: return CareResult.Failure(CareFailure.InvalidInput("复测必须已保存、属于本人且在本次随访开始之后"))
         return CareResult.Success(updated.toModel())
     }
 
@@ -313,16 +344,19 @@ class RoomFollowUpRepository(
         if (entity.status != AaStatus.TRACKING.name) return CareResult.Failure(CareFailure.Conflict("Exit request is already pending or tracking has ended"))
         val now = clock.nowEpochMillis()
         if (now - entity.enrolledAtEpochMillis < exitPolicy.minimumObservationMillis) {
-            return CareResult.Failure(CareFailure.Conflict("Minimum AA observation period has not been met"))
+            return CareResult.Failure(CareFailure.Conflict("尚未达到 AA 最短观察期"))
         }
         if (dao.unresolvedSafetyAlertCount(actor.actorId, actor.dataDomain.name) > 0) {
-            return CareResult.Failure(CareFailure.Conflict("Unresolved safety concern blocks AA exit"))
+            return CareResult.Failure(CareFailure.Conflict("仍有未处理的安全关注，暂不能退出 AA"))
+        }
+        if (!dao.hasStableReassessment(actor.actorId, actor.dataDomain.name, entity.enrolledAtEpochMillis, now)) {
+            return CareResult.Failure(CareFailure.Conflict("需要近期低关注复测结果，且复测任务已完成"))
         }
         if (exitPolicy.requireAllFollowUpTasksResolved && dao.tasksForStudent(actor.actorId, actor.dataDomain.name).any {
-                it.status != FollowUpTaskStatus.COMPLETED.name && it.status != FollowUpTaskStatus.CANCELLED.name
+                it.dueAtEpochMillis <= now && it.status != FollowUpTaskStatus.COMPLETED.name && it.status != FollowUpTaskStatus.CANCELLED.name
             }
         ) {
-            return CareResult.Failure(CareFailure.Conflict("Incomplete follow-up tasks block AA exit"))
+            return CareResult.Failure(CareFailure.Conflict("请先完成已到期的随访任务"))
         }
         val review = ExitReview(now, reason, null, null, null, null)
         val encrypted = when (val result = encryptReview(review, entity.enrollmentId, cipher)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
@@ -339,6 +373,7 @@ class RoomFollowUpRepository(
     }
 
     override suspend fun reviewExit(enrollmentId: String, decision: ExitReviewDecision, note: String): CareResult<AaEnrollment> {
+        if (note.isBlank()) return CareResult.Failure(CareFailure.InvalidInput("请填写审核备注"))
         val actor = when (val result = session.actorWithRole(ActorRole.TEACHER)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
         val entity = dao.enrollment(enrollmentId, actor.dataDomain.name) ?: return CareResult.Failure(CareFailure.NotFound("AA enrollment", enrollmentId))
         if (!dao.isAssigned(actor.actorId, entity.studentId, actor.dataDomain.name)) return CareResult.Failure(CareFailure.Forbidden("Teacher is not assigned to this student"))
@@ -347,12 +382,14 @@ class RoomFollowUpRepository(
         if (current.status != AaStatus.EXIT_REVIEW_PENDING) return CareResult.Failure(CareFailure.Conflict("Enrollment is not pending exit review"))
         val reviewed = pending.copy(reviewedAtEpochMillis = clock.nowEpochMillis(), reviewerId = actor.actorId, decision = decision, reviewNote = note)
         val encrypted = when (val result = encryptReview(reviewed, enrollmentId, cipher)) { is CareResult.Failure -> return result; is CareResult.Success -> result.value }
-        return when (dao.finalizeExitReview(enrollmentId, actor.actorId, actor.dataDomain.name, decision == ExitReviewDecision.APPROVED, encrypted)) {
+        return when (dao.finalizeExitReview(enrollmentId, actor.actorId, actor.dataDomain.name, decision == ExitReviewDecision.APPROVED, encrypted, clock.nowEpochMillis(), exitPolicy.minimumObservationMillis, exitPolicy.requireAllFollowUpTasksResolved)) {
             CareDao.EXIT_UPDATED -> dao.enrollment(enrollmentId, actor.dataDomain.name)!!.toModel(cipher)
             CareDao.EXIT_NOT_FOUND -> CareResult.Failure(CareFailure.NotFound("AA enrollment", enrollmentId))
             CareDao.EXIT_FORBIDDEN -> CareResult.Failure(CareFailure.Forbidden("Teacher is not assigned to this student"))
             CareDao.EXIT_INVALID_STATE -> CareResult.Failure(CareFailure.Conflict("Enrollment is not pending exit review"))
             CareDao.EXIT_SAFETY_BLOCKED -> CareResult.Failure(CareFailure.Conflict("Unresolved safety concern blocks AA exit"))
+            CareDao.EXIT_NOT_STABLE -> CareResult.Failure(CareFailure.Conflict("观察期或最近复测不满足退出条件"))
+            CareDao.EXIT_TASKS_PENDING -> CareResult.Failure(CareFailure.Conflict("仍有未完成的到期随访任务"))
             else -> CareResult.Failure(CareFailure.TemporarilyUnavailable("AA exit review could not be saved"))
         }
     }

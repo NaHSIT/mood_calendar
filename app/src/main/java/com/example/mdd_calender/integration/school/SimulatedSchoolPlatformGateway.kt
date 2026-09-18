@@ -25,7 +25,12 @@ class SimulatedSchoolPlatformGateway(
 
     override suspend fun deliver(alert: SchoolAlertDto, idempotencyKey: String): CareResult<DeliveryRecord> {
         return synchronized(lock) {
-            records[idempotencyKey]?.let { return@synchronized CareResult.Success(it) }
+            val previous = records[idempotencyKey]
+            previous?.let {
+                if (it.status != DeliveryStatus.RETRY_PENDING || (it.nextRetryAtEpochMillis ?: 0) > clock()) {
+                    return@synchronized CareResult.Success(it)
+                }
+            }
             val outcome = nextOutcome.also { nextOutcome = NextOutcome.DELIVER }
             val deliveryId = "sim-${UUID.randomUUID()}"
             val record = when (outcome) {
@@ -63,8 +68,9 @@ class SimulatedSchoolPlatformGateway(
                 receipt = "SIMULATED_FAILURE:${alert.eventId}",
             )
             }
-            records[idempotencyKey] = record
-            CareResult.Success(record)
+            val stable = record.copy(deliveryId = previous?.deliveryId ?: record.deliveryId, attemptCount = (previous?.attemptCount ?: 0) + 1)
+            records[idempotencyKey] = stable
+            CareResult.Success(stable)
         }
     }
 

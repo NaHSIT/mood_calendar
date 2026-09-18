@@ -1,0 +1,7 @@
+Starting: Intent { cmp=com.example.mdd_calender/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: com.example.mdd_calender/.MainActivity
+TotalTime: 965
+WaitTime: 969
+Complete
