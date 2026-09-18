@@ -3,6 +3,27 @@
 package com.example.mdd_calender.integration.app
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.HealthAndSafety
+import androidx.compose.material.icons.outlined.EventNote
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.FactCheck
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Icon
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import com.example.mdd_calender.ui.components.CareEntry
+import com.example.mdd_calender.ui.components.CareEmptyState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -67,16 +88,34 @@ fun CareHubScreen(
     onFollowUp: () -> Unit,
     onTeacher: () -> Unit,
 ) {
-    Column(
-        Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    LazyColumn(
+        Modifier.fillMaxSize(), contentPadding = PaddingValues(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("校园照护", style = MaterialTheme.typography.headlineSmall)
-        Text("原型闭环入口；演示身份与真实学校认证隔离。", style = MaterialTheme.typography.bodyMedium)
-        Button(onClick = onAssessment, Modifier.fillMaxWidth()) { Text("填写量表") }
-        Button(onClick = onHealth, Modifier.fillMaxWidth()) { Text("健康数据授权") }
-        Button(onClick = onFollowUp, Modifier.fillMaxWidth()) { Text("我的 AA 随访") }
-        OutlinedButton(onClick = onTeacher, Modifier.fillMaxWidth()) { Text("教师预警工作台（演示）") }
+        item {
+            Text("校园照护", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+            Text("让每一份感受，都被认真对待。", Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        item {
+            Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Icon(Icons.Outlined.FavoriteBorder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+                    Text("给自己一点时间", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                    Text("通过 PHQ-9 与 GAD-7，回顾最近两周的状态。没有标准答案，按真实感受选择就好。", style = MaterialTheme.typography.bodyMedium)
+                    Button(onClick = onAssessment, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(16.dp)) { Text("填写量表") }
+                }
+            }
+        }
+        item { Text("我的照护", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        item { CareEntry("健康数据授权", "心率与睡眠，仅在你授权后同步", Icons.Outlined.HealthAndSafety, onHealth) }
+        item { CareEntry("我的 AA 随访", "查看打卡、复测与持续关怀安排", Icons.Outlined.EventNote, onFollowUp) }
+        item { CareEntry("教师预警工作台（演示）", "查看关注事件，跟进与记录处理", Icons.Outlined.FactCheck, onTeacher) }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Outlined.Shield, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("当前为演示模式。原始健康数据仅本人可见，授权由你决定。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
@@ -97,8 +136,8 @@ fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, o
 
     Scaffold(topBar = { TopAppBar(title = { Text("量表评估") }, navigationIcon = { TextButton(onClick = onBack) { Text("返回") } }) }) { padding ->
         LazyColumn(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp).testTag("assessment-list"),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.fillMaxSize().padding(padding).testTag("assessment-list"),
+            contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -106,24 +145,33 @@ fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, o
                     FilterChip(enabled = !busy && completedAt == null, selected = type == AssessmentType.GAD_7, onClick = { type = AssessmentType.GAD_7 }, label = { Text("GAD-7") })
                 }
                 Text(descriptor.recallPeriod, style = MaterialTheme.typography.bodySmall)
-                Text(descriptor.contentNotice, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(16.dp))
+                Text("已完成 ${answers.count { it != null }} / ${answers.size} 题", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                LinearProgressIndicator(progress = { answers.count { it != null }.toFloat() / answers.size }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                Text("按真实感受选择，筛查结果不构成诊断。", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                var showNotice by rememberSaveable { mutableStateOf(false) }
+                TextButton(onClick = { showNotice = !showNotice }) { Text(if (showNotice) "收起量表说明" else "量表说明与使用范围") }
+                if (showNotice) Text(descriptor.contentNotice, style = MaterialTheme.typography.bodySmall)
             }
             itemsIndexed(descriptor.items) { index, question ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(question)
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text("${(index + 1).toString().padStart(2, '0')}  /  ${answers.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(question, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             descriptor.responseOptions.forEach { option ->
-                                FilterChip(
-                                    modifier = Modifier.testTag("answer-$index-${option.score}"),
-                                    selected = answers[index] == option.score,
-                                    enabled = !busy && completedAt == null,
-                                    onClick = {
+                                val selected = answers[index] == option.score
+                                Surface(shape = RoundedCornerShape(14.dp), color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
+                                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("answer-$index-${option.score}")
+                                        .selectable(selected = selected, enabled = !busy && completedAt == null, role = Role.RadioButton, onClick = {
                                         val updated = answers.toMutableList().also { it[index] = option.score }.toList()
                                         if (type == AssessmentType.PHQ_9) phqAnswers = updated else gadAnswers = updated
-                                    },
-                                    label = { Text("${option.score} ${option.label}") },
-                                )
+                                    }).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        RadioButton(selected, onClick = null, enabled = !busy && completedAt == null)
+                                        Text(option.label, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
                             }
                         }
                     }
@@ -285,7 +333,7 @@ fun FollowUpRoute(services: AppCareServices, onAssessmentTask: (String) -> Unit,
                     },
                     modifier = Modifier.weight(1f),
                 )
-                is CareResult.Failure -> Text("当前没有可用的随访记录。", Modifier.padding(20.dp))
+                is CareResult.Failure -> CareEmptyState("当前没有可用的随访记录", "加入 AA 随访后，你的打卡、复测与教师联系安排会显示在这里。", Icons.Outlined.EventNote, Modifier.padding(24.dp))
             }
             operationMessage?.let { Text(it, Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.primary) }
         }
@@ -336,7 +384,7 @@ private fun TeacherExitReviewPanel(services: AppCareServices) {
             is CareResult.Failure -> Text("退出申请加载失败。")
             is CareResult.Success -> {
                 val pending = result.value.filter { it.status == AaStatus.EXIT_REVIEW_PENDING }
-                if (pending.isEmpty()) Text("当前没有待审核的退出申请。")
+                if (pending.isEmpty()) CareEmptyState("暂时没有退出申请", "学生提交退出申请后，你可以在这里查看并审核。", Icons.Outlined.FactCheck)
                 else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(pending, key = { it.enrollmentId }) { enrollment ->
                         Card(Modifier.fillMaxWidth()) {

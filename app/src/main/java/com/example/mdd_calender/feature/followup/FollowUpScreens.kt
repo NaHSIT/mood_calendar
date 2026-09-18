@@ -1,6 +1,11 @@
 package com.example.mdd_calender.feature.followup
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.EventNote
+import androidx.compose.material3.LinearProgressIndicator
+import com.example.mdd_calender.ui.components.CareEmptyState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,17 +43,23 @@ fun StudentFollowUpScreen(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
-            Text("我的随访", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Text(state.statusLabel, style = MaterialTheme.typography.bodyLarge)
+            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("我的随访计划", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(state.statusLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    val completed = state.tasks.count { it.status == FollowUpTaskUiStatus.COMPLETED }
+                    Text("已完成 $completed / ${state.tasks.size} 项安排", style = MaterialTheme.typography.bodyMedium)
+                    if (state.tasks.isNotEmpty()) LinearProgressIndicator(progress = { completed.toFloat() / state.tasks.size }, modifier = Modifier.fillMaxWidth())
+                }
+            }
             PolicyDisclosure(state.policyDisclosure)
         }
         if (state.tasks.isEmpty()) {
-            item { Text("当前没有随访任务", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { CareEmptyState("当前没有随访任务", "新的打卡和复测安排会显示在这里。", Icons.Outlined.EventNote) }
         } else {
             items(state.tasks, key = { it.taskId }) { task ->
                 StudentTaskCard(task = task, onAction = { onTaskAction(task.taskId) })
@@ -72,12 +83,12 @@ fun StudentFollowUpScreen(
 private fun StudentTaskCard(task: StudentFollowUpTaskUi, onAction: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(task.title, fontWeight = FontWeight.SemiBold)
+                Text(task.title, modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
                 StatusPill(task.status)
             }
             Text(task.dueLabel, style = MaterialTheme.typography.bodySmall)

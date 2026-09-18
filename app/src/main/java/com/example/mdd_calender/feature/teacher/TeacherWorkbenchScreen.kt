@@ -4,6 +4,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.NotificationsNone
+import androidx.compose.material3.Surface
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import com.example.mdd_calender.ui.components.CareEmptyState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -64,42 +74,55 @@ fun TeacherInboxScreen(
             TeacherInboxFilter.CLOSED -> item.summary.disposition == AlertDisposition.CLOSED
         }
     }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item {
+            Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("关怀工作概览", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        OutlinedButton(onClick = onRefresh) { Text("刷新") }
+                    }
+                    Text("${state.items.size} 条关注事件 · ${state.exitReviews.size} 项退出待审核", style = MaterialTheme.typography.bodyMedium)
+                    Text("仅展示你负责学生的必要摘要，原始健康数据始终保持私密。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        item {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TeacherInboxFilter.values().forEach { filter ->
                 FilterChip(selected = state.filter == filter, onClick = { onFilter(filter) }, label = { Text(filterLabel(filter)) })
             }
         }
-        Spacer(Modifier.height(12.dp))
-        state.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        }
+        state.message?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.primary) } }
         if (state.exitReviews.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
+            item {
             Text("AA 退出待审核", style = MaterialTheme.typography.titleMedium)
             Text(
-                "批准前仍须由业务层复核稳定观察、安全关注及未来任务取消条件。",
+                "请结合近期复测和联系记录审核，批准后将结束本次随访。",
                 style = MaterialTheme.typography.bodySmall,
             )
-            state.exitReviews.forEach { review ->
+            }
+            items(state.exitReviews, key = { "exit:${it.enrollmentId}" }) { review ->
                 ExitReviewCard(review = review, onReview = onReviewExit)
             }
-            Spacer(Modifier.height(8.dp))
         }
-        if (state.loading) Text("加载中…")
-        else if (visible.isEmpty()) Text("暂无此状态的预警")
-        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+        else if (visible.isEmpty()) item {
+            CareEmptyState("暂无${filterLabel(state.filter)}的预警", "新的关注事件会在这里出现。可切换上方分类，查看其他处置阶段的记录。", Icons.Outlined.NotificationsNone)
+        }
+        else {
             items(visible, key = { it.summary.eventId }) { item ->
-                Card(Modifier.fillMaxWidth().clickable { onOpen(item.summary.eventId) }) {
-                    Column(Modifier.padding(16.dp)) {
+                Card(Modifier.fillMaxWidth().clickable { onOpen(item.summary.eventId) }, shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("学生代号：${item.summary.studentCode}", style = MaterialTheme.typography.titleMedium)
-                        Text("关注等级：${item.summary.concernLevel.label()}")
-                        Text("状态：${item.summary.disposition.label()}")
-                        Text("原因：${item.summary.minimalReasonTags.joinToString("、", transform = ::reasonLabel)}")
+                        Text("${item.summary.concernLevel.label()} · ${item.summary.disposition.label()}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                        Text(item.summary.minimalReasonTags.joinToString("、", transform = ::reasonLabel), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("查看详情与跟进 →", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onRefresh) { Text("刷新") }
     }
 }
 
@@ -143,14 +166,18 @@ fun TeacherAlertDetailScreen(
 ) {
     val item = details.item
     var note by remember(item.summary.eventId) { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("预警详情", style = MaterialTheme.typography.headlineSmall)
-        Text("学生代号：${item.summary.studentCode}")
-        Text("关注等级：${item.summary.concernLevel.label()}")
-        Text("最少必要原因：${item.summary.minimalReasonTags.joinToString("、", transform = ::reasonLabel)}")
-        Text("处置状态：${item.summary.disposition.label()}")
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Text("预警详情", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+            Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("学生代号：${item.summary.studentCode}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text("${item.summary.concernLevel.label()} · ${item.summary.disposition.label()}", color = MaterialTheme.colorScheme.primary)
+                Text(item.summary.minimalReasonTags.joinToString("、", transform = ::reasonLabel), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
         Text("仅显示教师工作摘要；不包含逐题答案、日记或原始健康数据。", style = MaterialTheme.typography.bodySmall)
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        Text("跟进与处置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         item.intervention?.let { intervention ->
             when (intervention.status) {
                 InterventionStatus.PENDING_CONFIRMATION -> Button(onClick = { onAcknowledge(intervention.caseId) }) { Text("确认预警") }

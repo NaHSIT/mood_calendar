@@ -129,8 +129,8 @@ private fun ConsentCard(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     val available = capability?.availability == HealthProviderAvailability.AVAILABLE
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     if (metric == HealthMetric.HEART_RATE) Icons.Default.FavoriteBorder else Icons.Default.NightsStay,
@@ -162,7 +162,7 @@ private fun ConsentCard(
                 style = MaterialTheme.typography.bodySmall,
             )
             Text(
-                "当前状态：${if (enabled) "已授权（修订 $consentRevision）" else "未授权"}",
+                "当前状态：${if (enabled) "已授权同步" else "未授权"}",
                 style = MaterialTheme.typography.labelMedium,
             )
         }
@@ -174,8 +174,8 @@ private fun NoticeCard(title: String, body: String) {
     Box(
         Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(16.dp))
-            .padding(16.dp),
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(24.dp))
+            .padding(20.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)

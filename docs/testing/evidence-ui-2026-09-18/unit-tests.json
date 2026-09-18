@@ -1,0 +1,92 @@
+[
+  {
+    "suite": "com.example.mdd_calender.domain.policy.AccessPolicyTest",
+    "tests": 3,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.ExampleUnitTest",
+    "tests": 1,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.assessment.AssessmentDraftTest",
+    "tests": 4,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.assessment.AssessmentScoringTest",
+    "tests": 6,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.assessment.QuestionnaireCatalogTest",
+    "tests": 3,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.followup.FollowUpPolicyTest",
+    "tests": 4,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.followup.FollowUpRepositoryUiAdapterTest",
+    "tests": 3,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.followup.FollowUpServiceTest",
+    "tests": 10,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.health.HealthProvidersTest",
+    "tests": 2,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.health.HealthSyncCoordinatorTest",
+    "tests": 7,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.health.RuleBasedPhysiologySignalExtractorTest",
+    "tests": 4,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.risk.RiskEvaluatorTest",
+    "tests": 7,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.feature.teacher.TeacherExitReviewTest",
+    "tests": 2,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.integration.school.SimulatedSchoolPlatformGatewayTest",
+    "tests": 2,
+    "failures": 0,
+    "errors": 0
+  },
+  {
+    "suite": "com.example.mdd_calender.ui.MoodViewModelIntegrationTest",
+    "tests": 2,
+    "failures": 0,
+    "errors": 0
+  }
+]
