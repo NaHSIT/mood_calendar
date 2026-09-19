@@ -5,6 +5,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -93,7 +96,7 @@ fun EditorScreen(
 
     val config by viewModel.iconConfig.collectAsState()
 
-    val weatherColors = getWeatherColors(WeatherCondition.CLEAR, false)
+    val weatherColors = getWeatherColors(WeatherCondition.CLEAR, isSystemInDarkTheme())
 
     Box(
         modifier = Modifier
@@ -107,7 +110,10 @@ fun EditorScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .widthIn(max = 840.dp)
+                .align(Alignment.TopCenter)
                 .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             Spacer(modifier = Modifier.height(56.dp))
             
@@ -212,7 +218,7 @@ fun EditorScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .heightIn(min = 240.dp)
                     .glassmorphicCard(cornerRadius = 32.dp, surfaceAlpha = weatherColors.surfaceAlpha)
                     .padding(24.dp)
             ) {

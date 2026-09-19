@@ -49,7 +49,7 @@ fun MainScreen(
             val currentRoute = navBackStackEntry?.destination?.route
 
             NavigationBar(
-                containerColor = Color.White.copy(alpha = 0.95f),
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
                 tonalElevation = 8.dp
             ) {
                 items.forEach { item ->
@@ -75,11 +75,11 @@ fun MainScreen(
                             }
                         },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFF0066FF),
-                            selectedTextColor = Color(0xFF0066FF),
-                            indicatorColor = Color(0xFF0066FF).copy(alpha = 0.15f),
-                            unselectedIconColor = Color.Gray,
-                            unselectedTextColor = Color.Gray
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     )
                 }

@@ -4,13 +4,14 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -52,7 +53,7 @@ fun CalendarScreenV3(
     val weatherData by viewModel.weatherData.collectAsState()
     val iconConfig by viewModel.iconConfig.collectAsState()
     
-    val weatherColors = getWeatherColors(weatherData?.condition ?: WeatherCondition.CLEAR, false) // Default
+    val weatherColors = getWeatherColors(weatherData?.condition ?: WeatherCondition.CLEAR, isSystemInDarkTheme())
 
     Box(
         modifier = Modifier
@@ -66,7 +67,10 @@ fun CalendarScreenV3(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .widthIn(max = 760.dp)
+                .align(Alignment.TopCenter)
                 .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             Spacer(modifier = Modifier.height(56.dp))
             
@@ -82,7 +86,7 @@ fun CalendarScreenV3(
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = weatherColors.textPrimary)
+                    Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = weatherColors.textPrimary)
                 }
                 Spacer(modifier = Modifier.width(16.dp))
                 Text(
@@ -164,32 +168,36 @@ fun CalendarScreenV3(
                         val emptyDaysBefore = firstDayOfMonth - 1
                         val totalCells = emptyDaysBefore + daysInMonth
 
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(7),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(totalCells) { index ->
-                                if (index < emptyDaysBefore) {
-                                    Box(modifier = Modifier.aspectRatio(1f))
-                                } else {
-                                    val dayOfMonth = index - emptyDaysBefore + 1
-                                    val date = targetMonth.atDay(dayOfMonth)
-                                    val record = monthlyRecords.find { it.date == date.format(DateTimeFormatter.ISO_LOCAL_DATE) }
-                                    
-                                    CalendarDayItemV3(
-                                        date = date,
-                                        isToday = date == LocalDate.now(),
-                                        record = record,
-                                        textColor = weatherColors.textPrimary,
-                                        onClick = { onDateClick(date) },
-                                        config = iconConfig
-                                    )
+                        Column {
+                            (0 until totalCells).chunked(7).forEach { week ->
+                                Row(Modifier.fillMaxWidth()) {
+                                    week.forEach { index ->
+                                        Box(Modifier.weight(1f)) {
+                                            if (index < emptyDaysBefore) {
+                                                Box(modifier = Modifier.aspectRatio(1f))
+                                            } else {
+                                                val dayOfMonth = index - emptyDaysBefore + 1
+                                                val date = targetMonth.atDay(dayOfMonth)
+                                                val record = monthlyRecords.find { it.date == date.format(DateTimeFormatter.ISO_LOCAL_DATE) }
+                                                CalendarDayItemV3(
+                                                    date = date,
+                                                    isToday = date == LocalDate.now(),
+                                                    record = record,
+                                                    textColor = weatherColors.textPrimary,
+                                                    onClick = { onDateClick(date) },
+                                                    config = iconConfig,
+                                                )
+                                            }
+                                        }
+                                    }
+                                    repeat(7 - week.size) { Spacer(Modifier.weight(1f)) }
                                 }
                             }
                         }
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

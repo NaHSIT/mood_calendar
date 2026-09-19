@@ -2,6 +2,7 @@ package com.example.mdd_calender.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -52,7 +53,7 @@ fun AnalysisScreen(
     val weatherData by viewModel.weatherData.collectAsState()
     val iconConfig by viewModel.iconConfig.collectAsState()
     
-    val weatherColors = getWeatherColors(weatherData?.condition ?: WeatherCondition.CLEAR, false)
+    val weatherColors = getWeatherColors(weatherData?.condition ?: WeatherCondition.CLEAR, isSystemInDarkTheme())
     var selectedFilterMood by remember { mutableStateOf<MoodType?>(null) }
     var showBottomSheet by remember { mutableStateOf(false) }
 
@@ -74,6 +75,8 @@ fun AnalysisScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .widthIn(max = 840.dp)
+                .align(Alignment.TopCenter)
                 .padding(horizontal = 24.dp)
                 .verticalScroll(rememberScrollState())
         ) {

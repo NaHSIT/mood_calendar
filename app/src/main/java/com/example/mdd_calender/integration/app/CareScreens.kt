@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.example.mdd_calender.ui.components.CareEntry
 import com.example.mdd_calender.ui.components.CareEmptyState
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -57,8 +58,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mdd_calender.domain.model.CareResult
-import com.example.mdd_calender.domain.model.AaStatus
-import com.example.mdd_calender.domain.model.ExitReviewDecision
 import com.example.mdd_calender.feature.assessment.AssessmentScorer
 import com.example.mdd_calender.feature.assessment.AssessmentType
 import com.example.mdd_calender.feature.assessment.QuestionnaireCatalog
@@ -342,7 +341,6 @@ fun FollowUpRoute(services: AppCareServices, onAssessmentTask: (String) -> Unit,
 
 @Composable
 fun TeacherRoute(services: AppCareServices, onBack: () -> Unit) {
-    var reviewingExits by remember { mutableStateOf(false) }
     val vm: TeacherWorkbenchViewModel = viewModel(
         key = "teacher-workbench",
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
@@ -353,69 +351,10 @@ fun TeacherRoute(services: AppCareServices, onBack: () -> Unit) {
     )
     Scaffold(topBar = {
         TopAppBar(
-            title = { Text(if (reviewingExits) "AA 退出审核" else "教师预警工作台") },
+            title = { Text("教师预警工作台") },
             navigationIcon = { TextButton(onClick = onBack) { Text("返回") } },
-            actions = {
-                TextButton(onClick = { reviewingExits = !reviewingExits }) {
-                    Text(if (reviewingExits) "预警" else "退出审核")
-                }
-            },
         )
     }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            if (reviewingExits) TeacherExitReviewPanel(services) else TeacherWorkbenchRoute(vm)
-        }
-    }
-}
-
-@Composable
-private fun TeacherExitReviewPanel(services: AppCareServices) {
-    var enrollments by remember { mutableStateOf<CareResult<List<com.example.mdd_calender.domain.model.AaEnrollment>>?>(null) }
-    var message by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    suspend fun reload() { enrollments = services.teacherFollowUp.listAssignedEnrollments() }
-    LaunchedEffect(Unit) { reload() }
-
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("仅展示责任范围内的退出申请。批准时会再次校验稳定观察期、量表复测和未解决安全关注，并取消未来任务。", style = MaterialTheme.typography.bodySmall)
-        message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-        when (val result = enrollments) {
-            null -> Text("加载中…")
-            is CareResult.Failure -> Text("退出申请加载失败。")
-            is CareResult.Success -> {
-                val pending = result.value.filter { it.status == AaStatus.EXIT_REVIEW_PENDING }
-                if (pending.isEmpty()) CareEmptyState("暂时没有退出申请", "学生提交退出申请后，你可以在这里查看并审核。", Icons.Outlined.FactCheck)
-                else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(pending, key = { it.enrollmentId }) { enrollment ->
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("学生：${enrollment.studentId}", style = MaterialTheme.typography.titleMedium)
-                                Text("申请理由：${enrollment.exitReview?.reason.orEmpty()}")
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(onClick = {
-                                        scope.launch {
-                                            message = when (val reviewed = services.teacherService.reviewExit(enrollment.enrollmentId, true, "责任教师批准")) {
-                                                is CareResult.Success -> "已批准退出，未来任务已取消。"
-                                                is CareResult.Failure -> (reviewed.error as? com.example.mdd_calender.domain.model.CareFailure.Conflict)?.reason ?: "批准失败。"
-                                            }
-                                            reload()
-                                        }
-                                    }) { Text("批准") }
-                                    OutlinedButton(onClick = {
-                                        scope.launch {
-                                            message = when (services.teacherService.reviewExit(enrollment.enrollmentId, false, "继续观察")) {
-                                                is CareResult.Success -> "已驳回，学生继续随访。"
-                                                is CareResult.Failure -> "驳回失败。"
-                                            }
-                                            reload()
-                                        }
-                                    }) { Text("驳回") }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        Box(Modifier.fillMaxSize().padding(padding)) { TeacherWorkbenchRoute(vm) }
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.isSystemInDarkTheme
 
 @Composable
 fun HomeScreen(
@@ -76,7 +77,7 @@ fun HomeScreen(
     val anniversaries by viewModel.anniversaries.collectAsState()
     val iconConfig by viewModel.iconConfig.collectAsState()
     
-    val isNightMode = false // Assume false or derive from time
+    val isNightMode = isSystemInDarkTheme()
     
     // Smooth transition between weather themes
     val weatherColors = getWeatherColors(weatherData?.condition ?: WeatherCondition.CLEAR, isNightMode)
@@ -117,7 +118,7 @@ fun HomeScreen(
                             .glassmorphicCard(cornerRadius = 100.dp, surfaceAlpha = 0.2f, shadowElevation = 8.dp)
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
-                        Icon(Icons.Default.LocationOn, contentDescription = "City", tint = weatherColors.textPrimary, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.LocationOn, contentDescription = "当前位置", tint = weatherColors.textPrimary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = locationName ?: "定位中...",
@@ -161,7 +162,7 @@ fun HomeScreen(
                             .clickable { onNavigateToSettings() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = weatherColors.textPrimary, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Settings, contentDescription = "设置", tint = weatherColors.textPrimary, modifier = Modifier.size(20.dp))
                     }
                 }
                 
@@ -172,7 +173,7 @@ fun HomeScreen(
                     
                     // Greeting
                     Text(
-                        text = "Hello,",
+                            text = "你好，",
                         style = MaterialTheme.typography.displayMedium.copy(
                             color = weatherColors.textPrimary.copy(alpha = 0.7f),
                             fontWeight = FontWeight.Light,
@@ -280,7 +281,7 @@ fun HomeScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Add, contentDescription = "Add", tint = weatherColors.textPrimary.copy(alpha = 0.6f))
+                                Icon(Icons.Default.Add, contentDescription = "添加纪念日", tint = weatherColors.textPrimary.copy(alpha = 0.6f))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     "添加纪念日或倒数",
@@ -328,7 +329,7 @@ fun HomeScreen(
                                     .padding(16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = "Add", tint = Color.White, modifier = Modifier.size(32.dp))
+                                Icon(Icons.Default.Add, contentDescription = "新增心情记录", tint = MaterialTheme.colorScheme.surface, modifier = Modifier.size(32.dp))
                             }
                         }
                     }
@@ -349,7 +350,7 @@ fun PermissionGuideCard(onGrantClick: () -> Unit) {
                 .padding(32.dp)
                 .fillMaxWidth(),
             shape = RoundedCornerShape(32.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.85f))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier.padding(32.dp),
@@ -357,11 +358,11 @@ fun PermissionGuideCard(onGrantClick: () -> Unit) {
             ) {
                 Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(56.dp), tint = Color(0xFF0066FF))
                 Spacer(modifier = Modifier.height(24.dp))
-                Text("需要您的定位权限", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = Color(0xFF111111))
+                Text("需要您的定位权限", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     "为了提供智能天气感知和动态背景，我们需要获取您的位置以匹配实时天气数据。", 
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     lineHeight = 24.sp
                 )
@@ -370,7 +371,7 @@ fun PermissionGuideCard(onGrantClick: () -> Unit) {
                     onClick = onGrantClick, 
                     shape = RoundedCornerShape(50),
                     modifier = Modifier.fillMaxWidth().height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0066FF))
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("授权位置信息", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }

@@ -2,6 +2,7 @@ package com.example.mdd_calender.ui.screens
 
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -47,7 +48,7 @@ fun DayDetailScreen(
         viewModel.selectDate(LocalDate.parse(date))
     }
 
-    val weatherColors = getWeatherColors(weatherData?.condition ?: WeatherCondition.CLEAR, false)
+    val weatherColors = getWeatherColors(weatherData?.condition ?: WeatherCondition.CLEAR, isSystemInDarkTheme())
 
     Box(
         modifier = Modifier
@@ -61,6 +62,8 @@ fun DayDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .widthIn(max = 840.dp)
+                .align(Alignment.TopCenter)
                 .padding(horizontal = 24.dp)
         ) {
             Spacer(modifier = Modifier.height(56.dp))
@@ -78,7 +81,7 @@ fun DayDetailScreen(
                         .clickable { onBack() },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = weatherColors.textPrimary)
+                    Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = weatherColors.textPrimary)
                 }
                 
                 Text(
@@ -208,7 +211,7 @@ fun DayDetailScreen(
                 .clickable { onNavigateToEditor(0) },
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Add", tint = weatherColors.textPrimary, modifier = Modifier.size(32.dp))
+            Icon(Icons.Default.Add, contentDescription = "新增心情记录", tint = weatherColors.textPrimary, modifier = Modifier.size(32.dp))
         }
     }
 }

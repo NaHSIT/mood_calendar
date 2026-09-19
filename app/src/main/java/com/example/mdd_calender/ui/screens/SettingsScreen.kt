@@ -5,11 +5,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -39,7 +39,7 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val config by viewModel.iconConfig.collectAsState()
-    val weatherColors = getWeatherColors(WeatherCondition.CLEAR, false)
+    val weatherColors = getWeatherColors(WeatherCondition.CLEAR, isSystemInDarkTheme())
     
     var selectedMoodForUpload by remember { mutableStateOf<MoodType?>(null) }
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -64,7 +64,10 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .widthIn(max = 840.dp)
+                .align(Alignment.TopCenter)
                 .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             Spacer(modifier = Modifier.height(56.dp))
             
@@ -159,15 +162,18 @@ fun SettingsScreen(
                     .glassmorphicCard(cornerRadius = 24.dp, surfaceAlpha = weatherColors.surfaceAlpha)
                     .padding(24.dp)
             ) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
-                ) {
-                    items(MoodType.entries) { mood ->
+                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                    MoodType.entries.chunked(3).forEach { rowMoods ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            rowMoods.forEach { mood ->
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.clickable {
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
                                 selectedMoodForUpload = mood
                                 photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                             }
@@ -183,9 +189,13 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodyMedium.copy(color = weatherColors.textPrimary)
                             )
                         }
+                            }
+                            repeat(3 - rowMoods.size) { Spacer(Modifier.weight(1f)) }
+                        }
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
