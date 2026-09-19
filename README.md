@@ -124,21 +124,115 @@ adb shell am start -n com.example.mdd_calender/.MainActivity
 
 日志与具体测试步骤：[分模块功能报告](docs/testing/2026-09-18-功能测试报告.md)、[界面改版回归报告](docs/testing/2026-09-18-UI优化验收.md)、[真机运行日志](docs/testing/evidence-ui-2026-09-18/instrumentation.log)。历史报告中的提交/安装状态以当次验收时间为准。
 
-## 项目结构
+## 代码架构
+
+项目目前只有一个 Gradle 模块 `:app`，采用 **Compose 界面 + 业务服务 + 领域接口 + Room 仓库** 的分层组织。`feature/*` 是同一模块内的功能包，不是独立安装包或 Gradle 子模块；学校平台与健康源目前由本地模拟实现提供，没有独立部署的照护后端。
+
+原有心情功能主要通过 `MoodViewModel` 管理状态；新增照护功能使用页面状态、特性服务和 `AppCareServices` 编排，不是所有页面都统一经过 ViewModel。
+
+### 目录与职责
 
 ```text
 app/src/main/java/com/example/mdd_calender/
-├── data/            # Room 数据库、仓库与持久化
-├── domain/          # 公共模型、接口与策略
-├── feature/         # assessment / health / risk / teacher / followup
-├── integration/     # 应用服务编排与学校平台接口
-├── security/        # 会话与敏感字段加密
-└── ui/              # 日历等页面、导航、主题和公共组件
+├── MainActivity.kt  # 初始化数据库、仓库、照护服务和根导航
+├── ui/
+│   ├── MoodViewModel.kt # 原有心情记录与偏好状态
+│   ├── navigation/  # 根导航、路由与参数
+│   ├── screens/     # 首页、日历、编辑、分析、纪念日和设置
+│   ├── components/  # 公共 UI 组件及照护卡片、空状态
+│   └── theme/       # 主题、颜色与字体
+├── feature/
+│   ├── assessment/ # PHQ-9、GAD-7题本、草稿与评分
+│   ├── health/     # 授权、同步、提供者适配、信号提取与界面
+│   ├── risk/       # 演示风险规则与预警事件构造
+│   ├── teacher/    # 教师工作台、状态与干预服务
+│   └── followup/   # AA策略、任务、界面模型与仓库适配
+├── integration/
+│   ├── app/        # AppCareServices装配与流程编排、CareScreens路由界面
+│   └── school/     # 模拟学校网关与协议说明
+├── domain/
+│   ├── model/      # 身份、量表、健康、预警、干预与随访公共模型
+│   ├── port/       # 仓库、会话、健康源、风险引擎与平台网关接口
+│   └── policy/     # 访问控制及AA退出策略
+├── data/
+│   ├── care/       # 照护Entity、DAO及Room仓库实现
+│   └── ...         # MoodDatabase、原有记录仓库、偏好与天气服务
+├── security/       # 演示会话、Android Keystore与AES-GCM字段加密
+└── utils/          # 定位、原有分析等辅助逻辑
 app/src/test/        # JVM 单元测试
 app/src/androidTest/ # 真机业务、安全、迁移与 Compose UI 测试
 docs/tasks/          # 模块任务书、契约和交接记录
 docs/testing/        # 测试报告、日志与真机截图
+docs/manuals/        # 六份软件说明书与操作手册
 ```
+
+### 运行时依赖
+
+```mermaid
+flowchart TD
+    Main[MainActivity] --> Nav[AppNavigation 与 Compose 页面]
+    Main --> Care[AppCareServices 装配入口]
+    Nav --> Mood[MoodViewModel]
+    Mood --> MoodRepo[MoodRepository]
+    Nav --> Care
+    Nav --> Feature[教师与随访等特性服务]
+    Care --> Rules[量表评分与风险规则]
+    Care --> Ports[domain port 接口]
+    Feature --> Ports
+    Ports --> Repos[Room 照护仓库]
+    Repos --> Security[可信会话 权限校验 字段加密]
+    Repos --> DB[MoodDatabase 与 DAO]
+    MoodRepo --> DB
+    DB --> SQLite[(本地 SQLite)]
+    Care --> Health[模拟 HealthDataProvider]
+    Care --> School[模拟 SchoolPlatformGateway]
+```
+
+该图描述运行时调用；领域接口由仓库或适配器实现。`MainActivity` 手动创建依赖，`AppCareServices` 为照护功能分别装配学生、教师和系统会话及对应仓库。系统会话用于内部评估，不等同于教师取得原始健康数据权限。
+
+| 入口或实现 | 主要职责 | 修改时关注 |
+|---|---|---|
+| [MainActivity](app/src/main/java/com/example/mdd_calender/MainActivity.kt) | 初始化依赖，启动前台投递重试循环 | 生命周期与服务装配 |
+| [AppNavigation](app/src/main/java/com/example/mdd_calender/ui/navigation/AppNavigation.kt) | 连接记录、量表、健康、教师和随访页面 | 路由参数、返回栈、复测任务ID |
+| [AppCareServices](app/src/main/java/com/example/mdd_calender/integration/app/AppCareServices.kt) | 串联量表保存、风险评估、预警与投递 | 幂等、失败恢复、演示数据域 |
+| [CareScreens](app/src/main/java/com/example/mdd_calender/integration/app/CareScreens.kt) | 照护首页、量表交互与各功能路由适配 | 草稿恢复、提交防重、状态刷新 |
+| [领域接口](app/src/main/java/com/example/mdd_calender/domain/port) | 定义跨功能仓库与外部接入契约 | 先协调公共契约，再修改实现 |
+| [PrivateRepositories](app/src/main/java/com/example/mdd_calender/data/care/PrivateRepositories.kt) | 量表、授权与原始健康数据持久化 | 本人归属、授权版本、敏感字段 |
+| [WorkRepositories](app/src/main/java/com/example/mdd_calender/data/care/WorkRepositories.kt) | 预警、干预、AA、任务与审计持久化 | 教师责任范围、事务、退出条件 |
+| [CareDao](app/src/main/java/com/example/mdd_calender/data/care/CareDao.kt) | SQL查询与关键原子操作 | 数据域过滤、时序检查、唯一约束 |
+
+### 核心调用流程
+
+1. **心情记录**：日历或编辑页面 → `MoodViewModel` → `MoodRepository` → `MoodDao` / `AnniversaryDao`。日记与量表独立保存，当前风险引擎不把日记文本作为自评答案。
+2. **量表与预警**：`AssessmentRoute` 完成评分 → `submitAssessmentAndTriggerCare` 保存本人量表 → 读取最近14天有效量表与授权生理信号 → `DemonstrationRiskEvaluator` 评估 → `AlertEventFactory` 按条件生成事件 → 保存预警、准备干预并投递最小化摘要。生理信号读取失败降级为空辅助输入，保留量表核心评估。
+3. **健康授权**：健康页面 → 授权仓库更新范围与版本 → 模拟提供者同步 → 原始样本加密保存。最终入库再次检查当前授权，拒绝撤回后的迟到数据；教师接口只取得衍生摘要。
+4. **干预与随访**：教师确认 → `TeacherWorkbenchService` 调用 `startWithAa` → Room事务更新干预、创建或复用活动AA并生成首轮任务 → 学生打卡或提交关联量表复测。结束干预后AA仍保留，退出需独立申请与教师复核。
+5. **平台投递**：先保存待投递记录，再调用 `SchoolPlatformGateway`；`MainActivity` 在 `STARTED` 生命周期内约每60秒检查待重试记录。当前为本地模拟回执，没有真实后台推送或进程终止后的可靠送达保证。
+
+量表提交到预警投递是多步骤编排，**不是覆盖全链路的单个数据库事务**；稳定标识和唯一键用于防重。干预启动与AA首轮任务则有专门的事务边界。
+
+### 数据与扩展边界
+
+- `MoodDatabase` 使用本地 `mood_database`，当前版本4，包含2张原有记录表和13张照护表。提供显式3→4迁移；新增字段或表时需同步版本、迁移及测试。
+- 量表答案、原始健康值、处理备注等字段由 `AndroidKeystoreCipher` 加密；总分、状态、时间和部分标识仍为明文，不能视为全库加密。
+- 健康来源通过 `HealthDataProvider` 替换；学校平台通过 `SchoolPlatformGateway` 替换。它们目前是 Kotlin 接口，尚无已部署的 HTTP API 服务。
+- 生产身份应替换 `DemoSessionProvider`，并增加服务端独立认证、责任分配和权限校验。单机演示入口不能作为正式角色隔离。
+- `feature/followup` 中的策略和调度能力不代表已全部接入主应用；当前主要完成首轮任务，持续多周调度与到期通知仍待集成。
+
+建议阅读顺序：`MainActivity` → `AppNavigation` → `CareScreens` / `AppCareServices` → 对应 `feature` → `domain/port` → Room仓库与DAO → 同功能测试。
+
+## 软件说明书
+
+以下为可编辑 Word 文档，基于仓库 `21c7fc9`、功能代码 `cb6e6b9` 编写，合计50页。界面文档使用真机截图；数据库文档列出15张表的字段、主键、索引与安全边界。页数以本次 Word 渲染为准，不同字体环境可能重新分页。
+
+| 文档 | 页数 | 内容 |
+|---|---:|---|
+| [功能需求说明书](docs/manuals/01-心情日历-功能需求说明书.docx) | 6 | 功能范围、角色权限、规则与验收条件 |
+| [概要设计说明书](docs/manuals/02-心情日历-概要设计说明书.docx) | 5 | 总体架构、模块职责、数据流与部署边界 |
+| [详细设计说明书](docs/manuals/03-心情日历-详细设计说明书.docx) | 7 | 接口、算法、状态迁移、事务与异常处理 |
+| [数据库设计说明书](docs/manuals/04-心情日历-数据库设计说明书.docx) | 18 | 15张表字段字典、逻辑关系、迁移与加密 |
+| [软件界面设计书](docs/manuals/05-心情日历-软件界面设计书.docx) | 6 | 页面结构、真机截图、组件与交互规范 |
+| [用户操作手册](docs/manuals/06-心情日历-用户操作手册.docx) | 8 | 安装、学生操作、教师干预、AA退出与问题处理 |
 
 ## 协作开发
 
