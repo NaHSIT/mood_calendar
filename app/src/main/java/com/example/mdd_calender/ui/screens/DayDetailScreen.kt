@@ -111,6 +111,32 @@ fun DayDetailScreen(
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(bottom = 80.dp) // Space for FAB
                 ) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 24.dp)
+                                .glassmorphicCard(cornerRadius = 24.dp, surfaceAlpha = weatherColors.surfaceAlpha)
+                                .padding(20.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("当日复盘", fontWeight = FontWeight.Bold, color = weatherColors.textPrimary)
+                                Text(
+                                    "共记录 ${records.size} 次，出现过 ${records.map { it.moodType }.distinct().joinToString("、")}。",
+                                    color = weatherColors.textPrimary.copy(alpha = .75f),
+                                )
+                                val gain = records.asReversed().firstNotNullOfOrNull { record ->
+                                    listOfNotNull(record.note, record.content).joinToString(" ").takeIf { it.isNotBlank() }
+                                }
+                                Text(
+                                    gain?.let { "今日收获：$it" } ?: "今日收获：还没有文字记录，点击下方按钮补充。",
+                                    maxLines = 3,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    color = weatherColors.textPrimary,
+                                )
+                            }
+                        }
+                    }
                     items(records) { record ->
                         val mood = MoodType.fromLabel(record.moodType)
                         

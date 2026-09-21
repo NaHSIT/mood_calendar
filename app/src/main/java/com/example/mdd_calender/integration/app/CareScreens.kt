@@ -184,8 +184,17 @@ fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, o
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-                message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-                if (submitted && score is ScoreResult.Complete) Text("本次量表总分：${score.total}（筛查结果不构成诊断）")
+                message?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
+                if (submitted && score is ScoreResult.Complete) {
+                    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("提交成功", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("本次总分：${score.total} 分")
+                            Text("结果范围：${score.symptomBand.toChineseLabel()}")
+                            Text("返回分析页后可在“量表评估”中查看历史结果。", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
                 Button(
                     enabled = score is ScoreResult.Complete && !busy && !submitted,
                     onClick = {
@@ -221,7 +230,7 @@ fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, o
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(if (busy) "提交中…" else if (submitted) "已提交" else "提交量表") }
                 Spacer(Modifier.height(20.dp))
-                OutlinedButton(onClick = onBack, Modifier.fillMaxWidth()) { Text("返回") }
+                OutlinedButton(onClick = onBack, Modifier.fillMaxWidth()) { Text(if (submitted) "完成并返回" else "返回") }
             }
         }
     }
@@ -292,6 +301,7 @@ fun FollowUpRoute(services: AppCareServices, onAssessmentTask: (String) -> Unit,
     val adapter = remember { FollowUpRepositoryUiAdapter(services.followUp, services.assessments) }
     val scope = rememberCoroutineScope()
     var operationMessage by remember { mutableStateOf<String?>(null) }
+    var showDemo by rememberSaveable { mutableStateOf(false) }
     var taskTypes by remember { mutableStateOf<Map<String, com.example.mdd_calender.domain.model.FollowUpTaskType>>(emptyMap()) }
     suspend fun reload() {
         services.ensureFollowUpTasks()
@@ -309,7 +319,18 @@ fun FollowUpRoute(services: AppCareServices, onAssessmentTask: (String) -> Unit,
         )
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            when (val result = state) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { showDemo = !showDemo }) { Text(if (showDemo) "返回我的数据" else "查看演示数据") }
+            }
+            if (showDemo) {
+                Text("演示数据 · 不会写入你的随访记录", Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                StudentFollowUpScreen(
+                    state = demoFollowUpState(),
+                    onTaskAction = { operationMessage = "这是只读演示任务，不会改变真实数据。" },
+                    onRequestExit = { operationMessage = "演示模式不提交退出申请。" },
+                    modifier = Modifier.weight(1f),
+                )
+            } else when (val result = state) {
                 null -> Text("加载中…", Modifier.padding(20.dp))
                 is CareResult.Success -> StudentFollowUpScreen(
                     result.value,
@@ -338,6 +359,27 @@ fun FollowUpRoute(services: AppCareServices, onAssessmentTask: (String) -> Unit,
         }
     }
 }
+
+private fun com.example.mdd_calender.feature.assessment.SymptomBand.toChineseLabel() = when (name) {
+    "MINIMAL" -> "极轻微"
+    "MILD" -> "轻度"
+    "MODERATE" -> "中度"
+    "MODERATELY_SEVERE" -> "中重度"
+    "SEVERE" -> "重度"
+    else -> name
+}
+
+private fun demoFollowUpState() = com.example.mdd_calender.feature.followup.StudentFollowUpUiState(
+    isTracking = true,
+    statusLabel = "AA 跟踪中（演示）",
+    policyDisclosure = "合成演示数据，仅用于展示随访流程；AA 为业务跟踪状态，不是诊断。",
+    tasks = listOf(
+        com.example.mdd_calender.feature.followup.StudentFollowUpTaskUi("demo-checkin", "简短心情打卡", "今天 20:00", com.example.mdd_calender.feature.followup.FollowUpTaskUiStatus.DUE, "查看演示"),
+        com.example.mdd_calender.feature.followup.StudentFollowUpTaskUi("demo-assessment", "PHQ-9 / GAD-7 复测", "3 天后", com.example.mdd_calender.feature.followup.FollowUpTaskUiStatus.UPCOMING, "查看演示"),
+        com.example.mdd_calender.feature.followup.StudentFollowUpTaskUi("demo-contact", "教师关怀联系", "已于昨日完成", com.example.mdd_calender.feature.followup.FollowUpTaskUiStatus.COMPLETED, null),
+    ),
+    exitRequestPending = false,
+)
 
 @Composable
 fun TeacherRoute(services: AppCareServices, onBack: () -> Unit) {

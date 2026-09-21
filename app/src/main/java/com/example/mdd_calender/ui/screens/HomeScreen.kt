@@ -74,6 +74,7 @@ fun HomeScreen(
     val selectedDate by viewModel.selectedDate.collectAsState()
     val weatherData by viewModel.weatherData.collectAsState()
     val records by viewModel.monthlyRecords.collectAsState()
+    val todayRecords by viewModel.todayRecords.collectAsState()
     val anniversaries by viewModel.anniversaries.collectAsState()
     val iconConfig by viewModel.iconConfig.collectAsState()
     
@@ -297,12 +298,12 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(220.dp)
+                        .heightIn(min = 220.dp)
                         .glassmorphicCard(cornerRadius = 40.dp, surfaceAlpha = weatherColors.surfaceAlpha)
                         .clickable { onNavigateToDayDetail(LocalDate.now().toString()) }
                         .padding(32.dp)
                 ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
                             text = "记录此刻",
                             style = MaterialTheme.typography.titleLarge.copy(
@@ -312,13 +313,35 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "捕获今天的每一个小情绪，\n让它们成为珍贵的回忆。",
+                            text = if (todayRecords.isEmpty()) "捕获今天的每一个小情绪，让它们成为珍贵的回忆。" else "今天已有 ${todayRecords.size} 条记录，左右滑动快速回看。",
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 color = weatherColors.textPrimary.copy(alpha = 0.7f),
                                 lineHeight = 22.sp
                             )
                         )
-                        Spacer(modifier = Modifier.weight(1f))
+                        Spacer(modifier = Modifier.height(18.dp))
+                        if (todayRecords.isNotEmpty()) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                items(todayRecords, key = { it.id }) { record ->
+                                    Surface(
+                                        modifier = Modifier.width(180.dp),
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = MaterialTheme.colorScheme.surface.copy(alpha = .65f),
+                                    ) {
+                                        Column(Modifier.padding(14.dp)) {
+                                            Text("${record.time} · ${record.moodType}", fontWeight = FontWeight.Bold, color = weatherColors.textPrimary)
+                                            Text(
+                                                listOfNotNull(record.note, record.content).joinToString(" ").ifBlank { "没有留下文字" },
+                                                maxLines = 2,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                color = weatherColors.textPrimary.copy(alpha = .72f),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(18.dp))
+                        }
                         
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             Box(
@@ -332,6 +355,29 @@ fun HomeScreen(
                                 Icon(Icons.Default.Add, contentDescription = "新增心情记录", tint = MaterialTheme.colorScheme.surface, modifier = Modifier.size(32.dp))
                             }
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .glassmorphicCard(cornerRadius = 28.dp, surfaceAlpha = weatherColors.surfaceAlpha)
+                        .clickable { onNavigateToDayDetail(LocalDate.now().toString()) }
+                        .padding(22.dp)
+                ) {
+                    Column {
+                        Text("今日收获 · 时光回流", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = weatherColors.textPrimary)
+                        Spacer(Modifier.height(8.dp))
+                        val latestText = todayRecords.asReversed().firstNotNullOfOrNull { record ->
+                            listOfNotNull(record.note, record.content).joinToString(" ").takeIf { it.isNotBlank() }
+                        }
+                        Text(
+                            latestText ?: "点这里写下今天值得记住的一件小事。",
+                            maxLines = 3,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            color = weatherColors.textPrimary.copy(alpha = .75f),
+                        )
                     }
                 }
                 

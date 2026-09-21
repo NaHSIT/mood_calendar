@@ -1,485 +1,231 @@
 package com.example.mdd_calender.ui.screens
 
-import androidx.compose.animation.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.mdd_calender.data.WeatherCondition
+import com.example.mdd_calender.domain.model.AssessmentRecord
+import com.example.mdd_calender.domain.model.CareResult
+import com.example.mdd_calender.integration.app.AppCareServices
 import com.example.mdd_calender.ui.MoodViewModel
+import com.example.mdd_calender.ui.analysis.DailyMoodPoint
+import com.example.mdd_calender.ui.analysis.buildMoodInsight
 import com.example.mdd_calender.ui.components.MoodType
 import com.example.mdd_calender.ui.components.MoodVectorIcon
 import com.example.mdd_calender.ui.components.glassmorphicCard
 import com.example.mdd_calender.ui.theme.getWeatherColors
+import java.time.Instant
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.LocalDate
-import coil.compose.AsyncImage
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items as lazyItems
-import android.net.Uri
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalysisScreen(
     viewModel: MoodViewModel,
-    onBack: () -> Unit
+    careServices: AppCareServices? = null,
+    onAssessment: () -> Unit = {},
+    onBack: () -> Unit,
 ) {
-    val currentMonth by viewModel.currentMonth.collectAsState()
-    val monthlyRecords by viewModel.monthlyRecords.collectAsState()
-    val weatherData by viewModel.weatherData.collectAsState()
-    val iconConfig by viewModel.iconConfig.collectAsState()
-    
-    val weatherColors = getWeatherColors(weatherData?.condition ?: WeatherCondition.CLEAR, isSystemInDarkTheme())
-    var selectedFilterMood by remember { mutableStateOf<MoodType?>(null) }
-    var showBottomSheet by remember { mutableStateOf(false) }
+    val month by viewModel.currentMonth.collectAsState()
+    val records by viewModel.monthlyRecords.collectAsState()
+    val weather by viewModel.weatherData.collectAsState()
+    val icons by viewModel.iconConfig.collectAsState()
+    val colors = getWeatherColors(weather?.condition ?: WeatherCondition.CLEAR, isSystemInDarkTheme())
+    val insight = remember(records) { buildMoodInsight(records) }
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var assessments by remember { mutableStateOf<List<AssessmentRecord>>(emptyList()) }
+    var assessmentError by remember { mutableStateOf<String?>(null) }
 
-    // Aggregate Data
-    val totalRecords = monthlyRecords.size
-    val moodCounts = monthlyRecords.groupingBy { it.moodType }.eachCount()
-    val sortedMoods = moodCounts.entries.sortedByDescending { it.value }
-    val dominantMood = sortedMoods.firstOrNull()?.key?.let { MoodType.fromLabel(it) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(weatherColors.backgroundStart, weatherColors.backgroundEnd)
-                )
-            )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .widthIn(max = 840.dp)
-                .align(Alignment.TopCenter)
-                .padding(horizontal = 24.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Spacer(modifier = Modifier.height(56.dp))
-            
-            // Top Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .glassmorphicCard(cornerRadius = 24.dp, surfaceAlpha = 0.5f, shadowElevation = 4.dp)
-                        .clickable { onBack() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回", tint = weatherColors.textPrimary)
-                }
-                
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { viewModel.changeMonth(currentMonth.minusMonths(1)) }) {
-                        Icon(Icons.Default.ChevronLeft, contentDescription = "上个月", tint = weatherColors.textPrimary)
-                    }
-                    val formatter = DateTimeFormatter.ofPattern("yyyy年 M月")
-                    Text(
-                        text = currentMonth.format(formatter), 
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = weatherColors.textPrimary,
-                            letterSpacing = (-0.5).sp
-                        )
-                    )
-                    IconButton(onClick = { viewModel.changeMonth(currentMonth.plusMonths(1)) }) {
-                        Icon(Icons.Default.ChevronRight, contentDescription = "下个月", tint = weatherColors.textPrimary)
-                    }
-                }
+    suspend fun reloadAssessments() {
+        if (careServices == null) return
+        when (val result = careServices.assessments.listForCurrentStudent()) {
+            is CareResult.Success -> {
+                assessments = result.value.sortedByDescending { it.completedAtEpochMillis ?: 0 }
+                assessmentError = null
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            var selectedTabIndex by remember { mutableIntStateOf(0) }
-            
-            TabRow(
-                selectedTabIndex = selectedTabIndex,
-                containerColor = Color.Transparent,
-                contentColor = weatherColors.textPrimary,
-                indicator = { tabPositions ->
-                    if (selectedTabIndex < tabPositions.size) {
-                        TabRowDefaults.Indicator(
-                            Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                            color = weatherColors.textPrimary
-                        )
-                    }
-                },
-                divider = { }
-            ) {
-                Tab(
-                    selected = selectedTabIndex == 0,
-                    onClick = { selectedTabIndex = 0 },
-                    text = { Text("📊 基础数据", fontWeight = FontWeight.Bold) }
-                )
-                Tab(
-                    selected = selectedTabIndex == 1,
-                    onClick = { selectedTabIndex = 1 },
-                    text = { Text("📋 量表评估", fontWeight = FontWeight.Bold) }
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-
-            if (selectedTabIndex == 0 && totalRecords == 0) {
-                // Empty State
-                Box(modifier = Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        "这个月还没有记录情绪，\n去首页记录一次吧！",
-                        color = weatherColors.textPrimary.copy(alpha = 0.7f),
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-            } else {
-                when (selectedTabIndex) {
-                    0 -> {
-                        // Overview Header Card
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .glassmorphicCard(cornerRadius = 32.dp, surfaceAlpha = weatherColors.surfaceAlpha)
-                                .padding(32.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column {
-                                    Text(
-                                        "总计记录",
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            color = weatherColors.textPrimary.copy(alpha = 0.7f),
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    )
-                                    Text(
-                                        "$totalRecords 天",
-                                        style = MaterialTheme.typography.displayMedium.copy(
-                                            color = weatherColors.textPrimary,
-                                            fontWeight = FontWeight.Black,
-                                            letterSpacing = (-1).sp
-                                        )
-                                    )
-                                }
-                                
-                                if (dominantMood != null) {
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(
-                                            "主导情绪",
-                                            style = MaterialTheme.typography.labelLarge.copy(
-                                                color = weatherColors.textPrimary.copy(alpha = 0.7f),
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Box(
-                                            modifier = Modifier
-                                                .size(56.dp)
-                                                .background(dominantMood.color.copy(alpha = 0.2f), CircleShape)
-                                                .padding(8.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            MoodVectorIcon(mood = dominantMood, config = iconConfig, modifier = Modifier.size(40.dp))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        // Distribution Bar Chart
-                        Text(
-                            "情绪色彩流",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                color = weatherColors.textPrimary,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)
-                        )
-                        
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(24.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .glassmorphicCard(cornerRadius = 12.dp, surfaceAlpha = 0.3f, shadowElevation = 0.dp)
-                        ) {
-                            sortedMoods.forEach { entry ->
-                                val mood = MoodType.fromLabel(entry.key)
-                                val weight = entry.value.toFloat() / totalRecords
-                                Box(
-                                    modifier = Modifier
-                                        .weight(weight)
-                                        .fillMaxHeight()
-                                        .background(mood?.color ?: Color.Gray)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(32.dp))
-
-                        // Bento Grid for details
-                        Text(
-                            "频次详情",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                color = weatherColors.textPrimary,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            modifier = Modifier.padding(start = 8.dp, bottom = 16.dp)
-                        )
-
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 1000.dp) // Nested scrolling constraint
-                        ) {
-                            items(sortedMoods) { entry ->
-                                val mood = MoodType.fromLabel(entry.key)
-                                val percentage = ((entry.value.toFloat() / totalRecords) * 100).toInt()
-                                
-                                Box(
-                                    modifier = Modifier
-                                        .aspectRatio(1.5f)
-                                        .glassmorphicCard(cornerRadius = 24.dp, surfaceAlpha = weatherColors.surfaceAlpha)
-                                        .clickable {
-                                            selectedFilterMood = mood
-                                            showBottomSheet = true
-                                        }
-                                        .padding(16.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxSize(),
-                                        verticalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.Top
-                                        ) {
-                                            if (mood != null) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(36.dp)
-                                                        .background(mood.color.copy(alpha = 0.15f), CircleShape)
-                                                        .padding(6.dp),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    MoodVectorIcon(mood = mood, config = iconConfig, modifier = Modifier.size(24.dp))
-                                                }
-                                            }
-                                            Text(
-                                                "$percentage%",
-                                                style = MaterialTheme.typography.labelLarge.copy(
-                                                    color = weatherColors.textPrimary.copy(alpha = 0.6f),
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            )
-                                        }
-                                        
-                                        Column {
-                                            Text(
-                                                text = "${entry.value} 次",
-                                                style = MaterialTheme.typography.titleLarge.copy(
-                                                    color = weatherColors.textPrimary,
-                                                    fontWeight = FontWeight.Black
-                                                )
-                                            )
-                                            Text(
-                                                text = entry.key,
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    color = mood?.color ?: weatherColors.textPrimary.copy(alpha = 0.7f),
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    1 -> {
-                        Text(
-                            "量表评估",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                color = weatherColors.textPrimary,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            modifier = Modifier.padding(start = 8.dp, bottom = 12.dp)
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .glassmorphicCard(cornerRadius = 24.dp, surfaceAlpha = weatherColors.surfaceAlpha)
-                                .padding(24.dp)
-                        ) {
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.Assignment,
-                                        contentDescription = "量表待评估",
-                                        tint = weatherColors.textPrimary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = "待评估",
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = FontWeight.Bold,
-                                            color = weatherColors.textPrimary
-                                        )
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    "情绪日记只用于个人记录，不会根据关键词推断疾病或关注等级。完成规范量表后，这里将显示量表结果与数据充分性。",
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        color = weatherColors.textPrimary.copy(alpha = 0.8f),
-                                        lineHeight = 24.sp
-                                    )
-                                )
-                                Spacer(modifier = Modifier.height(24.dp))
-                                Text(
-                                    "量表用于筛查和自我了解，不是临床诊断。如有紧急安全顾虑，请立即联系当地紧急服务或可信任的专业人员。",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        color = weatherColors.textPrimary.copy(alpha = 0.5f)
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(100.dp))
-            }
+            is CareResult.Failure -> assessmentError = "量表记录加载失败，请稍后重试。"
         }
     }
+    LaunchedEffect(careServices) { reloadAssessments() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val resumeScope = rememberCoroutineScope()
+    DisposableEffect(lifecycleOwner, careServices) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeScope.launch { reloadAssessments() }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
-    if (showBottomSheet && selectedFilterMood != null) {
-        val filteredRecords = monthlyRecords.filter { it.moodType == selectedFilterMood?.label }.sortedByDescending { it.date }
-        ModalBottomSheet(
-            onDismissRequest = { showBottomSheet = false },
-            containerColor = weatherColors.backgroundStart.copy(alpha = 0.95f),
-            scrimColor = Color.Black.copy(alpha = 0.5f)
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(colors.backgroundStart, colors.backgroundEnd)))) {
+        LazyColumn(
+            Modifier.fillMaxSize().widthIn(max = 840.dp).align(Alignment.TopCenter),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(selectedFilterMood!!.color.copy(alpha = 0.2f), CircleShape)
-                            .padding(8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        MoodVectorIcon(mood = selectedFilterMood!!, config = iconConfig, modifier = Modifier.size(24.dp))
+            item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回", tint = colors.textPrimary) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { viewModel.changeMonth(month.minusMonths(1)) }) { Icon(Icons.Default.ChevronLeft, "上个月", tint = colors.textPrimary) }
+                        Text(month.format(DateTimeFormatter.ofPattern("yyyy年 M月")), fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                        IconButton(onClick = { viewModel.changeMonth(month.plusMonths(1)) }) { Icon(Icons.Default.ChevronRight, "下个月", tint = colors.textPrimary) }
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        "${selectedFilterMood!!.label} 的记忆",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = weatherColors.textPrimary
-                        )
-                    )
                 }
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 500.dp)
-                ) {
-                    lazyItems(filteredRecords) { record ->
-                        val dateText = LocalDate.parse(record.date).format(DateTimeFormatter.ofPattern("M月d日"))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .glassmorphicCard(cornerRadius = 16.dp, surfaceAlpha = 0.15f)
-                                .padding(16.dp)
-                        ) {
-                            Column {
-                                Text(
-                                    dateText,
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        color = weatherColors.textPrimary.copy(alpha = 0.6f),
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                val textContent = "${record.note ?: ""} ${record.content ?: ""}".trim()
-                                if (textContent.isNotEmpty()) {
-                                    Text(
-                                        textContent,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            color = weatherColors.textPrimary,
-                                            lineHeight = 20.sp
-                                        )
-                                    )
-                                } else {
-                                    Text(
-                                        "没有留下文字...",
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            color = weatherColors.textPrimary.copy(alpha = 0.4f),
-                                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-                                        )
-                                    )
+                TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
+                    Tab(tab == 0, { tab = 0 }, text = { Text("情绪趋势") })
+                    Tab(tab == 1, { tab = 1 }, text = { Text("量表评估") })
+                }
+            }
+
+            if (tab == 0) {
+                if (records.isEmpty()) item { EmptyAnalysis(colors.textPrimary) }
+                else {
+                    item {
+                        GlassCard {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Column {
+                                    Text("记录天数", color = colors.textPrimary.copy(.65f))
+                                    Text("${insight.recordDays} 天", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black, color = colors.textPrimary)
+                                    Text("共 ${records.size} 条", color = colors.textPrimary.copy(.6f))
                                 }
-                                
-                                if (!record.imageUris.isNullOrEmpty()) {
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    val uri = record.imageUris.split(",").first()
-                                    AsyncImage(
-                                        model = Uri.parse(uri),
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(120.dp)
-                                            .clip(RoundedCornerShape(8.dp)),
-                                        contentScale = ContentScale.Crop
-                                    )
+                                insight.dominantMood?.let { mood ->
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("主导情绪", color = colors.textPrimary.copy(.65f))
+                                        MoodVectorIcon(mood, Modifier.size(48.dp), config = icons)
+                                        Text(mood.label, color = colors.textPrimary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item { SectionTitle("情绪趋势", colors.textPrimary); TrendChart(insight.points, colors.textPrimary) }
+                    item { InsightCard("周趋势", insight.weeklySummary, colors.textPrimary) }
+                    item { InsightCard("月趋势", insight.monthlySummary, colors.textPrimary) }
+                    item { InsightCard("变化提醒", insight.changeNotice, colors.textPrimary) }
+                    item { InsightCard("自我反思", insight.reflectionPrompt, colors.textPrimary, "基于记录规律生成，仅用于自我回顾，不作诊断。") }
+                    item {
+                        SectionTitle("频次详情", colors.textPrimary)
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            records.groupingBy { it.moodType }.eachCount().entries.sortedByDescending { it.value }.forEach { (label, count) ->
+                                val mood = MoodType.fromLabel(label)
+                                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = mood.color.copy(.14f)) {
+                                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        MoodVectorIcon(mood, Modifier.size(34.dp), config = icons)
+                                        Text(label, Modifier.padding(start = 12.dp).weight(1f), color = colors.textPrimary, fontWeight = FontWeight.Bold)
+                                        Text("$count 次 · ${count * 100 / records.size}%", color = colors.textPrimary)
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(32.dp))
+            } else {
+                item {
+                    GlassCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.AutoMirrored.Filled.Assignment, null)
+                            Spacer(Modifier.width(10.dp))
+                            Text(if (assessments.isEmpty()) "尚未完成量表" else "已完成 ${assessments.size} 次量表", fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Text("PHQ-9 与 GAD-7 是情绪风险评估的核心数据源。提交后结果会在此处回显。", color = colors.textPrimary.copy(.78f))
+                        assessmentError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        Spacer(Modifier.height(16.dp))
+                        Button(onClick = onAssessment, Modifier.fillMaxWidth()) { Text(if (assessments.isEmpty()) "开始填写量表" else "再次评估") }
+                    }
+                }
+                items(assessments, key = { it.assessmentId }) { assessment -> AssessmentResultCard(assessment) }
+                item { Text("量表用于筛查和自我了解，不是临床诊断。紧急安全顾虑请立即联系当地紧急服务或可信任的专业人员。", style = MaterialTheme.typography.bodySmall, color = colors.textPrimary.copy(.62f)) }
             }
+            item { Spacer(Modifier.height(64.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun GlassCard(content: @Composable ColumnScope.() -> Unit) {
+    Box(Modifier.fillMaxWidth().glassmorphicCard(28.dp, .72f).padding(22.dp)) { Column(content = content) }
+}
+
+@Composable private fun SectionTitle(text: String, color: Color) {
+    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color, modifier = Modifier.padding(bottom = 10.dp))
+}
+
+@Composable private fun InsightCard(title: String, body: String, color: Color, footnote: String? = null) {
+    GlassCard {
+        Text(title, fontWeight = FontWeight.Bold, color = color)
+        Spacer(Modifier.height(8.dp))
+        Text(body, color = color.copy(.82f))
+        footnote?.let { Spacer(Modifier.height(8.dp)); Text(it, style = MaterialTheme.typography.bodySmall, color = color.copy(.58f)) }
+    }
+}
+
+@Composable private fun EmptyAnalysis(color: Color) {
+    Box(Modifier.fillMaxWidth().height(260.dp), contentAlignment = Alignment.Center) { Text("这个月还没有记录\n先写下一次真实感受吧", color = color.copy(.7f)) }
+}
+
+@Composable private fun TrendChart(points: List<DailyMoodPoint>, color: Color) {
+    GlassCard {
+        if (points.size < 2) Text("至少记录 2 天后显示折线趋势。", color = color.copy(.7f))
+        else Canvas(Modifier.fillMaxWidth().height(160.dp)) {
+            val step = size.width / (points.size - 1)
+            val offsets = points.mapIndexed { index, point -> Offset(index * step, size.height - ((point.score - 1f) / 4f * size.height)) }
+            repeat(5) { level ->
+                val y = size.height * level / 4f
+                drawLine(color.copy(.12f), Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
+            }
+            offsets.zipWithNext().forEach { (a, b) -> drawLine(color, a, b, 3.dp.toPx(), StrokeCap.Round) }
+            offsets.forEach { drawCircle(color, 5.dp.toPx(), it) }
+        }
+        if (points.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Text("${points.first().date.monthValue}/${points.first().date.dayOfMonth} — ${points.last().date.monthValue}/${points.last().date.dayOfMonth}（1 低 — 5 高）", style = MaterialTheme.typography.bodySmall, color = color.copy(.62f))
+        }
+    }
+}
+
+@Composable private fun AssessmentResultCard(record: AssessmentRecord) {
+    val name = if (record.type.name == "PHQ_9") "PHQ-9" else "GAD-7"
+    val band = when (record.symptomBand.name) {
+        "MINIMAL" -> "极轻微"; "MILD" -> "轻度"; "MODERATE" -> "中度"
+        "MODERATELY_SEVERE" -> "中重度"; "SEVERE" -> "重度"; else -> record.symptomBand.name
+    }
+    val time = record.completedAtEpochMillis?.let {
+        Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+    } ?: "时间未知"
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(name, fontWeight = FontWeight.Bold)
+                Text("${record.totalScore} 分", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            }
+            Text("结果范围：$band")
+            Text(time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("已完成全部 ${record.answers.size} 题 · 结果仅用于筛查", style = MaterialTheme.typography.bodySmall)
         }
     }
 }

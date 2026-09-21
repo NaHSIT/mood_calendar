@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.mdd_calender.ui.MoodViewModel
+import com.example.mdd_calender.data.AnniversaryRecord
 import com.example.mdd_calender.ui.components.glassmorphicCard
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -35,9 +36,20 @@ fun AnniversaryScreen(
     val anniversaries by viewModel.anniversaries.collectAsState()
     
     var showAddDialog by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<AnniversaryRecord?>(null) }
     var newTitle by remember { mutableStateOf("") }
     var newDate by remember { mutableStateOf(LocalDate.now().plusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE)) }
     var isCountdown by remember { mutableStateOf(true) }
+    var dateError by remember { mutableStateOf<String?>(null) }
+
+    fun openEditor(record: AnniversaryRecord? = null) {
+        editing = record
+        newTitle = record?.title.orEmpty()
+        newDate = record?.targetDate ?: LocalDate.now().plusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE)
+        isCountdown = record?.isCountdown ?: true
+        dateError = null
+        showAddDialog = true
+    }
 
     Box(
         modifier = Modifier
@@ -79,7 +91,7 @@ fun AnniversaryScreen(
                     modifier = Modifier
                         .size(48.dp)
                         .glassmorphicCard(cornerRadius = 24.dp, surfaceAlpha = 0.5f, shadowElevation = 4.dp)
-                        .clickable { showAddDialog = true },
+                        .clickable { openEditor() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Add", tint = Color.Black)
@@ -97,6 +109,7 @@ fun AnniversaryScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(bottom = 32.dp)
                 ) {
+                    item { Text("点击任意卡片即可修改标题、日期和倒计时设置。", color = Color.Gray, style = MaterialTheme.typography.bodySmall) }
                     items(anniversaries) { ann ->
                         val targetDate = LocalDate.parse(ann.targetDate)
                         val daysDiff = ChronoUnit.DAYS.between(LocalDate.now(), targetDate)
@@ -110,6 +123,7 @@ fun AnniversaryScreen(
                                 .height(120.dp)
                                 .glassmorphicCard(cornerRadius = 24.dp, surfaceAlpha = 1f, shadowElevation = 8.dp)
                                 .background(color.copy(alpha = 0.1f))
+                                .clickable { openEditor(ann) }
                                 .padding(20.dp)
                         ) {
                             Row(
@@ -154,7 +168,7 @@ fun AnniversaryScreen(
                                 
                                 Spacer(modifier = Modifier.width(16.dp))
                                 IconButton(onClick = { viewModel.deleteAnniversary(ann) }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Gray.copy(alpha = 0.5f))
+                                    Icon(Icons.Default.Delete, contentDescription = "删除 ${ann.title}", tint = Color.Gray.copy(alpha = 0.7f))
                                 }
                             }
                         }
@@ -167,7 +181,7 @@ fun AnniversaryScreen(
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("添加重要日子") },
+            title = { Text(if (editing == null) "添加重要日子" else "编辑重要日子") },
             text = {
                 Column {
                     OutlinedTextField(
@@ -179,8 +193,10 @@ fun AnniversaryScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
                         value = newDate,
-                        onValueChange = { newDate = it },
+                        onValueChange = { newDate = it; dateError = null },
                         label = { Text("日期 (YYYY-MM-DD)") },
+                        isError = dateError != null,
+                        supportingText = { dateError?.let { Text(it) } },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -195,12 +211,17 @@ fun AnniversaryScreen(
             },
             confirmButton = {
                 Button(onClick = {
-                    if (newTitle.isNotBlank() && newDate.isNotBlank()) {
+                    val validDate = runCatching { LocalDate.parse(newDate) }.isSuccess
+                    if (!validDate) {
+                        dateError = "请输入有效日期，例如 2026-10-01"
+                    } else if (newTitle.isNotBlank()) {
                         viewModel.saveAnniversary(
+                            id = editing?.id ?: 0,
                             title = newTitle,
                             targetDate = newDate,
                             isCountdown = isCountdown,
-                            colorHex = "#FF4081" // Default Pink for now
+                            colorHex = editing?.colorHex ?: "#FF4081",
+                            createdAt = editing?.createdAt ?: System.currentTimeMillis(),
                         )
                         showAddDialog = false
                     }
@@ -209,7 +230,7 @@ fun AnniversaryScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAddDialog = false }) {
+                TextButton(onClick = { showAddDialog = false; editing = null }) {
                     Text("取消")
                 }
             }

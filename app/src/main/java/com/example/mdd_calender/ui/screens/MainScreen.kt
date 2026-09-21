@@ -116,7 +116,9 @@ fun MainScreen(
             composable(Route.ANALYSIS) {
                 AnalysisScreen(
                     viewModel = viewModel,
-                    onBack = { /* Handled by bottom nav */ }
+                    careServices = careServices,
+                    onAssessment = { parentNavController.navigate(Route.createAssessmentRoute()) },
+                    onBack = { bottomNavController.navigate(Route.HOME) { launchSingleTop = true } }
                 )
             }
             composable("care_hub") {

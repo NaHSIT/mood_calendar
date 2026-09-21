@@ -36,6 +36,9 @@ class MoodViewModel(
 
     private val _selectedDateRecords = MutableStateFlow<List<MoodRecord>>(emptyList())
     val selectedDateRecords: StateFlow<List<MoodRecord>> = _selectedDateRecords.asStateFlow()
+
+    private val _todayRecords = MutableStateFlow<List<MoodRecord>>(emptyList())
+    val todayRecords: StateFlow<List<MoodRecord>> = _todayRecords.asStateFlow()
     
     private val _anniversaries = MutableStateFlow<List<AnniversaryRecord>>(emptyList())
     val anniversaries: StateFlow<List<AnniversaryRecord>> = _anniversaries.asStateFlow()
@@ -98,11 +101,13 @@ class MoodViewModel(
 
     private var monthJob: Job? = null
     private var dateJob: Job? = null
+    private var todayJob: Job? = null
     private var anniversaryJob: Job? = null
 
     init {
         loadRecordsForMonth(_currentMonth.value)
         loadRecordForDate(_selectedDate.value)
+        loadTodayRecords()
         loadAnniversaries()
     }
 
@@ -139,6 +144,15 @@ class MoodViewModel(
             }
         }
     }
+
+    private fun loadTodayRecords() {
+        todayJob?.cancel()
+        todayJob = viewModelScope.launch {
+            repository.getMoodRecordsByDate(LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)).collect { records ->
+                _todayRecords.value = records
+            }
+        }
+    }
     
     private fun loadAnniversaries() {
         anniversaryJob?.cancel()
@@ -167,13 +181,22 @@ class MoodViewModel(
         }
     }
     
-    fun saveAnniversary(title: String, targetDate: String, isCountdown: Boolean, colorHex: String) {
+    fun saveAnniversary(
+        id: Int = 0,
+        title: String,
+        targetDate: String,
+        isCountdown: Boolean,
+        colorHex: String,
+        createdAt: Long = System.currentTimeMillis(),
+    ) {
         viewModelScope.launch {
             repository.saveAnniversary(AnniversaryRecord(
+                id = id,
                 title = title,
                 targetDate = targetDate,
                 isCountdown = isCountdown,
-                colorHex = colorHex
+                colorHex = colorHex,
+                createdAt = createdAt,
             ))
         }
     }
