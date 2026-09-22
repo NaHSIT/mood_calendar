@@ -324,7 +324,9 @@ fun HomeScreen(
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                                 items(todayRecords, key = { it.id }) { record ->
                                     Surface(
-                                        modifier = Modifier.width(180.dp),
+                                        modifier = Modifier
+                                            .width(180.dp)
+                                            .clickable { onNavigateToDayDetail(record.date) },
                                         shape = RoundedCornerShape(18.dp),
                                         color = MaterialTheme.colorScheme.surface.copy(alpha = .65f),
                                     ) {

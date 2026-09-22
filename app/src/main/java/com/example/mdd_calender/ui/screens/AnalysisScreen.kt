@@ -2,9 +2,11 @@ package com.example.mdd_calender.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -12,6 +14,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -27,6 +32,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.mdd_calender.data.WeatherCondition
+import com.example.mdd_calender.data.MoodRecord
 import com.example.mdd_calender.domain.model.AssessmentRecord
 import com.example.mdd_calender.domain.model.CareResult
 import com.example.mdd_calender.integration.app.AppCareServices
@@ -42,11 +48,14 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalysisScreen(
     viewModel: MoodViewModel,
     careServices: AppCareServices? = null,
     onAssessment: () -> Unit = {},
+    onDayHistory: (String) -> Unit = {},
+    onNewEntry: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     val month by viewModel.currentMonth.collectAsState()
@@ -58,6 +67,7 @@ fun AnalysisScreen(
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var assessments by remember { mutableStateOf<List<AssessmentRecord>>(emptyList()) }
     var assessmentError by remember { mutableStateOf<String?>(null) }
+    var reflectionOpen by rememberSaveable { mutableStateOf(false) }
 
     suspend fun reloadAssessments() {
         if (careServices == null) return
@@ -96,12 +106,82 @@ fun AnalysisScreen(
                     }
                 }
                 TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
-                    Tab(tab == 0, { tab = 0 }, text = { Text("情绪趋势") })
-                    Tab(tab == 1, { tab = 1 }, text = { Text("量表评估") })
+                    Tab(tab == 0, { tab = 0 }, text = { Text("深度洞察") })
+                    Tab(tab == 1, { tab = 1 }, text = { Text("情绪趋势") })
+                    Tab(tab == 2, { tab = 2 }, text = { Text("量表评估") })
                 }
             }
 
             if (tab == 0) {
+                item {
+                    GlassCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Psychology, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text("认知反思", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                Text("参考 CBT 的事件—想法—证据结构", style = MaterialTheme.typography.bodySmall, color = colors.textPrimary.copy(.65f))
+                            }
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Text(insight.reflectionPrompt, color = colors.textPrimary.copy(.85f))
+                        Spacer(Modifier.height(16.dp))
+                        Button(onClick = { reflectionOpen = true }, Modifier.fillMaxWidth()) { Text("开始自我反思") }
+                        Spacer(Modifier.height(8.dp))
+                        Text("这是自我整理工具，不读取日记关键词，也不提供医学诊断。", style = MaterialTheme.typography.bodySmall, color = colors.textPrimary.copy(.58f))
+                    }
+                }
+                item {
+                    GlassCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.WarningAmber, null, tint = MaterialTheme.colorScheme.tertiary)
+                            Spacer(Modifier.width(10.dp))
+                            Text("状态提醒与个人检测", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Text(insight.changeNotice, color = colors.textPrimary.copy(.82f))
+                        Spacer(Modifier.height(14.dp))
+                        OutlinedButton(onClick = onAssessment, Modifier.fillMaxWidth()) { Text("进行 PHQ-9 / GAD-7 自评") }
+                        Text("风险等级以量表为核心依据；情绪记录只作辅助观察。", style = MaterialTheme.typography.bodySmall, color = colors.textPrimary.copy(.58f), modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+                item {
+                    GlassCard {
+                        Text("记录规律", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                        Spacer(Modifier.height(14.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            PatternMetric("最近连续", "${insight.recordPattern.latestStreak} 天", colors.textPrimary, Modifier.weight(1f))
+                            PatternMetric("最长连续", "${insight.recordPattern.longestStreak} 天", colors.textPrimary, Modifier.weight(1f))
+                            PatternMetric("情绪波动", insight.recordPattern.variabilityLabel, colors.textPrimary, Modifier.weight(1f))
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Text("常用记录时段：${insight.recordPattern.activePeriod}", color = colors.textPrimary.copy(.72f))
+                        Text(insight.recordPattern.nextStep, color = colors.textPrimary, modifier = Modifier.padding(top = 8.dp))
+                        val highDate = insight.recordPattern.highPointDate
+                        val lowDate = insight.recordPattern.lowPointDate
+                        if (highDate != null && lowDate != null) {
+                            Spacer(Modifier.height(12.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedButton(onClick = { onDayHistory(highDate.toString()) }, modifier = Modifier.weight(1f)) {
+                                    Text("回看高点 ${highDate.monthValue}/${highDate.dayOfMonth}")
+                                }
+                                OutlinedButton(onClick = { onDayHistory(lowDate.toString()) }, modifier = Modifier.weight(1f)) {
+                                    Text("回看低点 ${lowDate.monthValue}/${lowDate.dayOfMonth}")
+                                }
+                            }
+                        }
+                    }
+                }
+                if (records.isNotEmpty()) {
+                    item {
+                        SectionTitle("最近记录", colors.textPrimary)
+                        RecordCarousel(records, colors.textPrimary, onDayHistory)
+                    }
+                }
+                item {
+                    TextButton(onClick = { tab = 1 }, Modifier.fillMaxWidth()) { Text("查看完整情绪趋势") }
+                }
+            } else if (tab == 1) {
                 if (records.isEmpty()) item { EmptyAnalysis(colors.textPrimary) }
                 else {
                     item {
@@ -126,7 +206,10 @@ fun AnalysisScreen(
                     item { InsightCard("周趋势", insight.weeklySummary, colors.textPrimary) }
                     item { InsightCard("月趋势", insight.monthlySummary, colors.textPrimary) }
                     item { InsightCard("变化提醒", insight.changeNotice, colors.textPrimary) }
-                    item { InsightCard("自我反思", insight.reflectionPrompt, colors.textPrimary, "基于记录规律生成，仅用于自我回顾，不作诊断。") }
+                    item {
+                        SectionTitle("历史心情", colors.textPrimary)
+                        RecordCarousel(records, colors.textPrimary, onDayHistory)
+                    }
                     item {
                         SectionTitle("频次详情", colors.textPrimary)
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -164,6 +247,43 @@ fun AnalysisScreen(
             item { Spacer(Modifier.height(64.dp)) }
         }
     }
+
+    if (reflectionOpen) {
+        ModalBottomSheet(onDismissRequest = { reflectionOpen = false }) {
+            Column(
+                Modifier.fillMaxWidth().widthIn(max = 720.dp).padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text("认知反思练习", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(insight.reflectionGuide.observation, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                insight.reflectionGuide.questions.forEachIndexed { index, question ->
+                    Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f)) {
+                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+                            Text("${index + 1}", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(12.dp))
+                            Text(question, Modifier.weight(1f))
+                        }
+                    }
+                }
+                insight.reflectionGuide.focusDate?.let { date ->
+                    OutlinedButton(
+                        onClick = { reflectionOpen = false; onDayHistory(date.toString()) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.History, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("回看 ${date.monthValue}月${date.dayOfMonth}日记录")
+                    }
+                }
+                Button(
+                    onClick = { reflectionOpen = false; onNewEntry() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("写下此刻的想法") }
+                Text("若出现伤害自己或他人的想法，请立即联系当地紧急服务、学校心理中心或可信任的人。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
 }
 
 @Composable
@@ -181,6 +301,45 @@ private fun GlassCard(content: @Composable ColumnScope.() -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text(body, color = color.copy(.82f))
         footnote?.let { Spacer(Modifier.height(8.dp)); Text(it, style = MaterialTheme.typography.bodySmall, color = color.copy(.58f)) }
+    }
+}
+
+@Composable
+private fun RecordCarousel(records: List<MoodRecord>, color: Color, onDayHistory: (String) -> Unit) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(end = 20.dp)) {
+        items(records.sortedWith(compareByDescending<MoodRecord> { it.date }.thenByDescending { it.time }), key = { it.id }) { record ->
+            val mood = MoodType.fromLabel(record.moodType)
+            Surface(
+                modifier = Modifier.width(210.dp).clickable { onDayHistory(record.date) },
+                shape = RoundedCornerShape(20.dp),
+                color = mood.color.copy(alpha = .14f),
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        MoodVectorIcon(mood, Modifier.size(30.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(record.moodType, fontWeight = FontWeight.Bold, color = color)
+                    }
+                    Text("${record.date}  ${record.time}", style = MaterialTheme.typography.bodySmall, color = color.copy(.62f))
+                    Text(
+                        listOfNotNull(record.note, record.content).joinToString(" ").ifBlank { "没有留下文字" },
+                        maxLines = 2,
+                        color = color.copy(.78f),
+                    )
+                    Text("点击回看当天", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PatternMetric(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .55f)) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, fontWeight = FontWeight.Bold, color = color, maxLines = 1)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = color.copy(.6f), maxLines = 1)
+        }
     }
 }
 

@@ -118,6 +118,8 @@ fun MainScreen(
                     viewModel = viewModel,
                     careServices = careServices,
                     onAssessment = { parentNavController.navigate(Route.createAssessmentRoute()) },
+                    onDayHistory = { date -> parentNavController.navigate(Route.createDayDetailRoute(date)) },
+                    onNewEntry = { parentNavController.navigate(Route.createEditorRoute(java.time.LocalDate.now().toString(), 0)) },
                     onBack = { bottomNavController.navigate(Route.HOME) { launchSingleTop = true } }
                 )
             }
