@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material.icons.outlined.EventNote
 import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
@@ -22,7 +20,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import com.example.mdd_calender.ui.components.CareEntry
 import com.example.mdd_calender.ui.components.CareEmptyState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
@@ -75,48 +72,8 @@ import com.example.mdd_calender.feature.health.HealthConsentSnapshot
 import com.example.mdd_calender.feature.health.HealthManagementUiState
 import com.example.mdd_calender.feature.health.RawHealthDataScreen
 import com.example.mdd_calender.feature.health.RawHealthDataView
-import com.example.mdd_calender.feature.teacher.TeacherWorkbenchRoute
-import com.example.mdd_calender.feature.teacher.TeacherWorkbenchViewModel
 import kotlinx.coroutines.launch
 import java.util.UUID
-
-@Composable
-fun CareHubScreen(
-    onAssessment: () -> Unit,
-    onHealth: () -> Unit,
-    onFollowUp: () -> Unit,
-    onTeacher: () -> Unit,
-) {
-    LazyColumn(
-        Modifier.fillMaxSize(), contentPadding = PaddingValues(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item {
-            Text("校园照护", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-            Text("让每一份感受，都被认真对待。", Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        item {
-            Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-                Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Icon(Icons.Outlined.FavoriteBorder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
-                    Text("给自己一点时间", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                    Text("通过 PHQ-9 与 GAD-7，回顾最近两周的状态。没有标准答案，按真实感受选择就好。", style = MaterialTheme.typography.bodyMedium)
-                    Button(onClick = onAssessment, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(16.dp)) { Text("填写量表") }
-                }
-            }
-        }
-        item { Text("我的照护", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-        item { CareEntry("健康数据授权", "心率与睡眠，仅在你授权后同步", Icons.Outlined.HealthAndSafety, onHealth) }
-        item { CareEntry("我的 AA 随访", "查看打卡、复测与持续关怀安排", Icons.Outlined.EventNote, onFollowUp) }
-        item { CareEntry("教师预警工作台（演示）", "查看关注事件，跟进与记录处理", Icons.Outlined.FactCheck, onTeacher) }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Outlined.Shield, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("当前为演示模式。原始健康数据仅本人可见，授权由你决定。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
 
 @Composable
 fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, onBack: () -> Unit) {
@@ -204,9 +161,16 @@ fun AssessmentRoute(services: AppCareServices, followUpTaskId: String? = null, o
                         if (completedAt == null) completedAt = System.currentTimeMillis()
                         scope.launch {
                             try {
+                            val actor = when (val current = services.session.currentActor()) {
+                                is CareResult.Success -> current.value
+                                is CareResult.Failure -> {
+                                    message = "登录状态无效，请重新进入学生账号。"
+                                    return@launch
+                                }
+                            }
                             val record = complete.toAssessmentRecord(
                                 assessmentId = submissionId,
-                                studentId = "demo-student",
+                                studentId = actor.actorId,
                                 instrumentVersion = descriptor.version,
                                 answers = answers.map { requireNotNull(it) },
                                 completedAtEpochMillis = requireNotNull(completedAt),
@@ -296,7 +260,7 @@ fun HealthRoute(services: AppCareServices, onBack: () -> Unit) {
 }
 
 @Composable
-fun FollowUpRoute(services: AppCareServices, onAssessmentTask: (String) -> Unit, onBack: () -> Unit) {
+fun FollowUpRoute(services: AppCareServices, onAssessmentTask: (String) -> Unit, onBack: () -> Unit, showBack: Boolean = true) {
     var state by remember { mutableStateOf<com.example.mdd_calender.domain.model.CareResult<com.example.mdd_calender.feature.followup.StudentFollowUpUiState>?>(null) }
     val adapter = remember { FollowUpRepositoryUiAdapter(services.followUp, services.assessments) }
     val scope = rememberCoroutineScope()
@@ -315,7 +279,7 @@ fun FollowUpRoute(services: AppCareServices, onAssessmentTask: (String) -> Unit,
     Scaffold(topBar = {
         TopAppBar(
             title = { Text("我的 AA 随访") },
-            navigationIcon = { TextButton(onClick = onBack) { Text("返回") } },
+            navigationIcon = { if (showBack) TextButton(onClick = onBack) { Text("返回") } },
         )
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -380,23 +344,3 @@ private fun demoFollowUpState() = com.example.mdd_calender.feature.followup.Stud
     ),
     exitRequestPending = false,
 )
-
-@Composable
-fun TeacherRoute(services: AppCareServices, onBack: () -> Unit) {
-    val vm: TeacherWorkbenchViewModel = viewModel(
-        key = "teacher-workbench",
-        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
-                TeacherWorkbenchViewModel(services.teacherService) as T
-        },
-    )
-    Scaffold(topBar = {
-        TopAppBar(
-            title = { Text("教师预警工作台") },
-            navigationIcon = { TextButton(onClick = onBack) { Text("返回") } },
-        )
-    }) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) { TeacherWorkbenchRoute(vm) }
-    }
-}

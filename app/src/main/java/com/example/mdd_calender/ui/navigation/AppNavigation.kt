@@ -17,10 +17,15 @@ import com.example.mdd_calender.integration.app.AppCareServices
 import com.example.mdd_calender.integration.app.AssessmentRoute
 import com.example.mdd_calender.integration.app.FollowUpRoute
 import com.example.mdd_calender.integration.app.HealthRoute
-import com.example.mdd_calender.integration.app.TeacherRoute
+import com.example.mdd_calender.ui.screens.DemoRoleEntryScreen
+import com.example.mdd_calender.ui.screens.TeacherMainScreen
+import com.example.mdd_calender.feature.teacher.TeacherWorkbenchViewModel
+import com.example.mdd_calender.domain.model.ActorRole
 
 object Route {
+    const val ENTRY = "entry"
     const val MAIN = "main"
+    const val TEACHER_MAIN = "teacher_main"
     const val HOME = "home"
     const val CALENDAR = "calendar"
     const val EDITOR = "editor/{date}/{id}"
@@ -30,8 +35,6 @@ object Route {
     const val DAY_DETAIL = "day_detail/{date}"
     const val ASSESSMENT = "assessment?followUpTaskId={followUpTaskId}"
     const val HEALTH = "health"
-    const val FOLLOW_UP = "follow_up"
-    const val TEACHER = "teacher"
     
     fun createDayDetailRoute(date: String) = "day_detail/$date"
     fun createEditorRoute(date: String, id: Int) = "editor/$date/$id"
@@ -48,14 +51,48 @@ fun AppNavigation(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Route.MAIN,
+        startDestination = Route.ENTRY,
         modifier = modifier
     ) {
+        composable(Route.ENTRY) {
+            fun enter(role: ActorRole) {
+                val destination = when (landingForRole(role)) {
+                    RoleLanding.STUDENT_SPACE -> Route.MAIN
+                    RoleLanding.TEACHER_WORKBENCH -> Route.TEACHER_MAIN
+                    RoleLanding.DENIED -> return
+                }
+                navController.navigate(destination) { launchSingleTop = true }
+            }
+            DemoRoleEntryScreen(
+                onStudentDemo = { enter(ActorRole.STUDENT) },
+                onTeacherDemo = { enter(ActorRole.TEACHER) },
+            )
+        }
         composable(Route.MAIN) {
             com.example.mdd_calender.ui.screens.MainScreen(
                 parentNavController = navController,
                 viewModel = viewModel,
                 careServices = careServices,
+                onLogout = {
+                    navController.navigate(Route.ENTRY) {
+                        popUpTo(Route.MAIN) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+        composable(Route.TEACHER_MAIN) {
+            val services = requireNotNull(careServices)
+            TeacherMainScreen(
+                viewModel = androidx.lifecycle.viewmodel.compose.viewModel {
+                    TeacherWorkbenchViewModel(services.teacherService)
+                },
+                onLogout = {
+                    navController.navigate(Route.ENTRY) {
+                        popUpTo(Route.TEACHER_MAIN) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         
@@ -120,16 +157,6 @@ fun AppNavigation(
         }
         composable(Route.HEALTH) {
             HealthRoute(requireNotNull(careServices), onBack = { navController.popBackStack() })
-        }
-        composable(Route.FOLLOW_UP) {
-            FollowUpRoute(
-                requireNotNull(careServices),
-                onAssessmentTask = { navController.navigate(Route.createAssessmentRoute(it)) },
-                onBack = { navController.popBackStack() },
-            )
-        }
-        composable(Route.TEACHER) {
-            TeacherRoute(requireNotNull(careServices), onBack = { navController.popBackStack() })
         }
     }
 }

@@ -27,6 +27,8 @@ import com.example.mdd_calender.ui.MoodViewModel
 import com.example.mdd_calender.ui.components.glassmorphicCard
 import com.example.mdd_calender.ui.theme.getWeatherColors
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.CalendarMonth
 import java.time.format.DateTimeFormatter
 import java.time.LocalDate
 import androidx.compose.foundation.lazy.LazyRow
@@ -34,6 +36,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import com.example.mdd_calender.domain.model.CareResult
+import com.example.mdd_calender.integration.app.AppCareServices
+import java.time.YearMonth
 
 @Composable
 fun HomeScreen(
@@ -42,7 +49,10 @@ fun HomeScreen(
     onNavigateToDayDetail: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToAnalysis: () -> Unit,
-    onNavigateToAnniversary: () -> Unit
+    onNavigateToAnniversary: () -> Unit,
+    onNavigateToAssessment: () -> Unit,
+    onNavigateToFollowUp: () -> Unit,
+    careServices: AppCareServices? = null,
 ) {
     val context = LocalContext.current
     var hasLocationPermission by remember { mutableStateOf(false) }
@@ -77,6 +87,18 @@ fun HomeScreen(
     val todayRecords by viewModel.todayRecords.collectAsState()
     val anniversaries by viewModel.anniversaries.collectAsState()
     val iconConfig by viewModel.iconConfig.collectAsState()
+    var assessmentCount by remember { mutableIntStateOf(0) }
+    var hasFollowUp by remember { mutableStateOf(false) }
+
+    LaunchedEffect(careServices) {
+        if (careServices != null) {
+            assessmentCount = when (val result = careServices.assessments.listForCurrentStudent()) {
+                is CareResult.Success -> result.value.size
+                is CareResult.Failure -> 0
+            }
+            hasFollowUp = careServices.followUp.currentStudentEnrollment() is CareResult.Success
+        }
+    }
     
     val isNightMode = isSystemInDarkTheme()
     
@@ -189,7 +211,54 @@ fun HomeScreen(
                             letterSpacing = (-1).sp
                         )
                     )
-                    
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Button(
+                        onClick = { onNavigateToDayDetail(LocalDate.now().toString()) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                    ) {
+                        Icon(Icons.Default.Add, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("记录今天的心情")
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    MonthOverviewCard(
+                        month = YearMonth.now(),
+                        recordsByDate = records.groupBy { it.date },
+                        textColor = weatherColors.textPrimary,
+                        onDateClick = onNavigateToDayDetail,
+                        onOpenCalendar = onNavigateToCalendar,
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Box(
+                        modifier = Modifier.fillMaxWidth().glassmorphicCard(28.dp, weatherColors.surfaceAlpha)
+                            .clickable { onNavigateToAssessment() }.padding(22.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Assignment, null, tint = weatherColors.textPrimary)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("状态评估", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = weatherColors.textPrimary)
+                                Text(if (assessmentCount == 0) "填写 PHQ-9 / GAD-7 量表" else "已完成 $assessmentCount 次 · 点击再次评估", color = weatherColors.textPrimary.copy(.7f))
+                            }
+                            Text("进入", color = weatherColors.textPrimary)
+                        }
+                    }
+                    if (hasFollowUp) {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Box(
+                            modifier = Modifier.fillMaxWidth().glassmorphicCard(28.dp, weatherColors.surfaceAlpha)
+                                .clickable { onNavigateToFollowUp() }.padding(22.dp),
+                        ) {
+                            Column {
+                                Text("随访任务提醒", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = weatherColors.textPrimary)
+                                Text("你有正在进行的关怀计划，点击查看待完成任务。", color = weatherColors.textPrimary.copy(.7f), modifier = Modifier.padding(top = 6.dp))
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(32.dp))
                     
                     // Anniversary Showcase Header
@@ -388,6 +457,50 @@ fun HomeScreen(
         }
     }
 }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MonthOverviewCard(
+    month: YearMonth,
+    recordsByDate: Map<String, List<com.example.mdd_calender.data.MoodRecord>>,
+    textColor: Color,
+    onDateClick: (String) -> Unit,
+    onOpenCalendar: () -> Unit,
+) {
+    val firstOffset = month.atDay(1).dayOfWeek.value - 1
+    val cells = List(firstOffset) { null } + (1..month.lengthOfMonth()).map(month::atDay)
+    Box(Modifier.fillMaxWidth().glassmorphicCard(28.dp, .35f).padding(18.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CalendarMonth, null, tint = textColor)
+                    Spacer(Modifier.width(8.dp))
+                    Text("本月情绪日历", fontWeight = FontWeight.Bold, color = textColor)
+                }
+                TextButton(onClick = onOpenCalendar) { Text("查看完整日历") }
+            }
+            Row(Modifier.fillMaxWidth()) {
+                listOf("一", "二", "三", "四", "五", "六", "日").forEach { Text(it, Modifier.weight(1f), color = textColor.copy(.55f), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+            }
+            cells.chunked(7).forEach { week ->
+                Row(Modifier.fillMaxWidth()) {
+                    week.forEach { date ->
+                        val dateRecords = date?.let { recordsByDate[it.toString()].orEmpty() }.orEmpty()
+                        val dotColor = dateRecords.lastOrNull()?.moodType?.let { com.example.mdd_calender.ui.components.MoodType.fromLabel(it).color }
+                        Column(
+                            Modifier.weight(1f).height(38.dp).then(if (date != null) Modifier.clickable { onDateClick(date.toString()) } else Modifier),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(date?.dayOfMonth?.toString().orEmpty(), color = textColor, style = MaterialTheme.typography.bodySmall)
+                            if (dotColor != null) Box(Modifier.padding(top = 3.dp).size(5.dp).background(dotColor, CircleShape))
+                        }
+                    }
+                    repeat(7 - week.size) { Spacer(Modifier.weight(1f).height(38.dp)) }
+                }
+            }
+        }
+    }
 }
 
 @Composable

@@ -6,6 +6,8 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.AssignmentTurnedIn
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -19,13 +21,13 @@ import androidx.compose.ui.unit.dp
 import com.example.mdd_calender.ui.MoodViewModel
 import com.example.mdd_calender.ui.navigation.Route
 import com.example.mdd_calender.integration.app.AppCareServices
-import com.example.mdd_calender.integration.app.CareHubScreen
+import com.example.mdd_calender.integration.app.FollowUpRoute
 
 sealed class BottomNavItem(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    object Home : BottomNavItem(Route.HOME, "首页", Icons.Default.Home)
-    object Calendar : BottomNavItem(Route.CALENDAR, "日历", Icons.Default.DateRange)
-    object Analysis : BottomNavItem(Route.ANALYSIS, "分析", Icons.Default.Info)
-    object Care : BottomNavItem("care_hub", "照护", Icons.Default.Favorite)
+    object Home : BottomNavItem(Route.HOME, "情绪日历", Icons.Default.Home)
+    object Analysis : BottomNavItem(Route.ANALYSIS, "数据洞察", Icons.Default.Info)
+    object FollowUp : BottomNavItem("student_follow_up", "随访任务", Icons.Default.AssignmentTurnedIn)
+    object Profile : BottomNavItem("student_profile", "我的", Icons.Default.Person)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,13 +36,14 @@ fun MainScreen(
     parentNavController: NavHostController,
     viewModel: MoodViewModel,
     careServices: AppCareServices? = null,
+    onLogout: () -> Unit = {},
 ) {
     val bottomNavController = rememberNavController()
     val items = listOf(
         BottomNavItem.Home,
-        BottomNavItem.Calendar,
         BottomNavItem.Analysis,
-        BottomNavItem.Care
+        BottomNavItem.FollowUp,
+        BottomNavItem.Profile,
     )
 
     Scaffold(
@@ -56,7 +59,7 @@ fun MainScreen(
                     NavigationBarItem(
                         icon = { Icon(item.icon, contentDescription = item.title) },
                         label = { Text(item.title) },
-                        selected = currentRoute == item.route,
+                        selected = currentRoute == item.route || (item == BottomNavItem.Home && currentRoute == Route.CALENDAR),
                         onClick = {
                             if (currentRoute != item.route) {
                                 bottomNavController.navigate(item.route) {
@@ -101,13 +104,16 @@ fun MainScreen(
                     },
                     onNavigateToSettings = { parentNavController.navigate(Route.SETTINGS) },
                     onNavigateToAnalysis = { bottomNavController.navigate(Route.ANALYSIS) },
-                    onNavigateToAnniversary = { parentNavController.navigate(Route.ANNIVERSARY) }
+                    onNavigateToAnniversary = { parentNavController.navigate(Route.ANNIVERSARY) },
+                    onNavigateToAssessment = { parentNavController.navigate(Route.createAssessmentRoute()) },
+                    onNavigateToFollowUp = { bottomNavController.navigate("student_follow_up") },
+                    careServices = careServices,
                 )
             }
             composable(Route.CALENDAR) {
                 CalendarScreenV3(
                     viewModel = viewModel,
-                    onBack = { /* Handled by bottom nav */ },
+                    onBack = { bottomNavController.popBackStack() },
                     onDateClick = { date ->
                         parentNavController.navigate(Route.createDayDetailRoute(date.toString()))
                     }
@@ -123,12 +129,19 @@ fun MainScreen(
                     onBack = { bottomNavController.navigate(Route.HOME) { launchSingleTop = true } }
                 )
             }
-            composable("care_hub") {
-                CareHubScreen(
-                    onAssessment = { parentNavController.navigate(Route.createAssessmentRoute()) },
+            composable("student_follow_up") {
+                FollowUpRoute(
+                    services = requireNotNull(careServices),
+                    onAssessmentTask = { parentNavController.navigate(Route.createAssessmentRoute(it)) },
+                    onBack = { bottomNavController.navigate(Route.HOME) { launchSingleTop = true } },
+                    showBack = false,
+                )
+            }
+            composable("student_profile") {
+                StudentProfileScreen(
                     onHealth = { parentNavController.navigate(Route.HEALTH) },
-                    onFollowUp = { parentNavController.navigate(Route.FOLLOW_UP) },
-                    onTeacher = { parentNavController.navigate(Route.TEACHER) },
+                    onSettings = { parentNavController.navigate(Route.SETTINGS) },
+                    onLogout = onLogout,
                 )
             }
         }
