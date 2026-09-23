@@ -29,6 +29,7 @@ import com.example.mdd_calender.ui.theme.getWeatherColors
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Psychology
 import java.time.format.DateTimeFormatter
 import java.time.LocalDate
 import androidx.compose.foundation.lazy.LazyRow
@@ -242,6 +243,22 @@ fun HomeScreen(
                             Column(Modifier.weight(1f)) {
                                 Text("状态评估", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = weatherColors.textPrimary)
                                 Text(if (assessmentCount == 0) "填写 PHQ-9 / GAD-7 量表" else "已完成 $assessmentCount 次 · 点击再次评估", color = weatherColors.textPrimary.copy(.7f))
+                            }
+                            Text("进入", color = weatherColors.textPrimary)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Box(
+                        modifier = Modifier.fillMaxWidth().glassmorphicCard(28.dp, weatherColors.surfaceAlpha)
+                            .clickable { onNavigateToAnalysis() }.padding(22.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Psychology, null, tint = weatherColors.textPrimary)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("深度洞察", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = weatherColors.textPrimary)
+                                Text("查看本月趋势、记录规律与 CBT 结构化自我反思", color = weatherColors.textPrimary.copy(.7f))
                             }
                             Text("进入", color = weatherColors.textPrimary)
                         }

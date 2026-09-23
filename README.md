@@ -133,6 +133,8 @@ adb shell am start -n com.example.mdd_calender/.MainActivity
 
 **2026-09-22 双角色入口重构：** 增加独立学生/教师演示入口和基于可信角色的落地页映射。学生端使用四个主导航，教师端使用两个主导航；学生首页增加本月情绪日历、量表状态和条件式随访提醒。教师详情按四段固定顺序展示，并区分评估提醒、安全预警与辅助标签。接口权限仍由 SessionProvider、本人归属、教师责任范围和数据域共同校验；Debug 构建、66 项 JVM 测试和 Lint 通过，本轮按要求不执行真机测试，详情见[双角色入口与权限隔离报告](docs/testing/2026-09-22-双角色入口与权限隔离报告.md)。
 
+**2026-09-23 深度洞察入口修正：** 学生首页恢复“深度洞察”快捷卡片；底部“数据洞察”进入后仍默认显示深度洞察，并在首屏增加本月摘要和下一步建议。保留 CBT 结构化自我反思、记录规律、情绪趋势和量表入口，不使用未经临床验证的“医学模型”表述。本轮 Debug 构建、66 项 JVM 测试和 Lint 通过，按要求未执行真机测试。
+
 ```powershell
 # 本地单元测试、构建与静态检查
 .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug

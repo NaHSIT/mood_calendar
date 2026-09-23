@@ -105,6 +105,9 @@ fun AnalysisScreen(
                         IconButton(onClick = { viewModel.changeMonth(month.plusMonths(1)) }) { Icon(Icons.Default.ChevronRight, "下个月", tint = colors.textPrimary) }
                     }
                 }
+                Text("数据洞察", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = colors.textPrimary)
+                Text("从记录规律、情绪变化和量表结果了解自己的近况", color = colors.textPrimary.copy(.68f))
+                Spacer(Modifier.height(12.dp))
                 TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
                     Tab(tab == 0, { tab = 0 }, text = { Text("深度洞察") })
                     Tab(tab == 1, { tab = 1 }, text = { Text("情绪趋势") })
@@ -113,6 +116,18 @@ fun AnalysisScreen(
             }
 
             if (tab == 0) {
+                item {
+                    GlassCard {
+                        Text("本月洞察摘要", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                        Spacer(Modifier.height(10.dp))
+                        Text(insight.monthlySummary, color = colors.textPrimary.copy(.86f))
+                        Spacer(Modifier.height(12.dp))
+                        Text("下一步建议", fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                        Text(insight.recordPattern.nextStep, color = colors.textPrimary.copy(.78f), modifier = Modifier.padding(top = 6.dp))
+                        Spacer(Modifier.height(12.dp))
+                        Text("基于本人记录生成，仅用于自我观察，不替代专业评估。", style = MaterialTheme.typography.bodySmall, color = colors.textPrimary.copy(.58f))
+                    }
+                }
                 item {
                     GlassCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
