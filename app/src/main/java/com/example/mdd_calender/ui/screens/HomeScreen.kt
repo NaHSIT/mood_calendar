@@ -27,9 +27,9 @@ import com.example.mdd_calender.ui.MoodViewModel
 import com.example.mdd_calender.ui.components.glassmorphicCard
 import com.example.mdd_calender.ui.theme.getWeatherColors
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import java.time.format.DateTimeFormatter
 import java.time.LocalDate
 import androidx.compose.foundation.lazy.LazyRow
@@ -76,8 +76,6 @@ fun HomeScreen(
         ) {
             hasLocationPermission = true
             viewModel.fetchLocationAndWeather(context)
-        } else {
-            locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
     }
 
@@ -118,12 +116,7 @@ fun HomeScreen(
                 )
             )
     ) {
-        if (!hasLocationPermission) {
-            PermissionGuideCard(
-                onGrantClick = { locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }
-            )
-        } else {
-            Column(
+        Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 24.dp)
@@ -145,7 +138,7 @@ fun HomeScreen(
                         Icon(Icons.Default.LocationOn, contentDescription = "当前位置", tint = weatherColors.textPrimary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = locationName ?: "定位中...",
+                            text = locationName ?: if (hasLocationPermission) "定位中..." else "未启用定位",
                             style = MaterialTheme.typography.labelLarge.copy(
                                 color = weatherColors.textPrimary,
                                 fontWeight = FontWeight.SemiBold
@@ -194,6 +187,13 @@ fun HomeScreen(
                 val scrollState = androidx.compose.foundation.rememberScrollState()
                 Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(scrollState)) {
                     Spacer(modifier = Modifier.height(48.dp))
+
+                    if (!hasLocationPermission) {
+                        PermissionGuideCard(
+                            onGrantClick = { locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
                     
                     // Greeting
                     Text(
@@ -238,7 +238,7 @@ fun HomeScreen(
                             .clickable { onNavigateToAssessment() }.padding(22.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Assignment, null, tint = weatherColors.textPrimary)
+                            Icon(Icons.AutoMirrored.Filled.Assignment, null, tint = weatherColors.textPrimary)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text("状态评估", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = weatherColors.textPrimary)
@@ -471,7 +471,6 @@ fun HomeScreen(
                 
                 Spacer(modifier = Modifier.height(100.dp))
             }
-        }
     }
 }
 }
@@ -522,38 +521,27 @@ private fun MonthOverviewCard(
 
 @Composable
 fun PermissionGuideCard(onGrantClick: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Card(
-            modifier = Modifier
-                .padding(32.dp)
-                .fillMaxWidth(),
-            shape = RoundedCornerShape(32.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .88f))
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.Start
         ) {
-            Column(
-                modifier = Modifier.padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(56.dp), tint = Color(0xFF0066FF))
-                Spacer(modifier = Modifier.height(24.dp))
-                Text("需要您的定位权限", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = MaterialTheme.colorScheme.onSurface)
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    "为了提供智能天气感知和动态背景，我们需要获取您的位置以匹配实时天气数据。", 
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    lineHeight = 24.sp
-                )
-                Spacer(modifier = Modifier.height(32.dp))
-                Button(
-                    onClick = onGrantClick, 
-                    shape = RoundedCornerShape(50),
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Text("授权位置信息", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("天气背景（可选）", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "授权粗略位置后可显示当地天气；不授权也能正常记录心情、填写量表和查看洞察。",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            OutlinedButton(onClick = onGrantClick) { Text("启用天气") }
         }
     }
 }

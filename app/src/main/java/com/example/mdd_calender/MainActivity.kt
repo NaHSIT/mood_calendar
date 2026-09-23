@@ -24,7 +24,6 @@ import com.example.mdd_calender.integration.app.AppCareServices
 import com.example.mdd_calender.ui.MoodViewModel
 import com.example.mdd_calender.ui.navigation.AppNavigation
 import com.example.mdd_calender.ui.theme.Mdd_calenderTheme
-import androidx.compose.material.icons.filled.Add
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

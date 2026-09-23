@@ -55,10 +55,6 @@ class MoodViewModel(
             try {
                 if (androidx.core.content.ContextCompat.checkSelfPermission(
                         context,
-                        android.Manifest.permission.ACCESS_FINE_LOCATION
-                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
-                    androidx.core.content.ContextCompat.checkSelfPermission(
-                        context,
                         android.Manifest.permission.ACCESS_COARSE_LOCATION
                     ) == android.content.pm.PackageManager.PERMISSION_GRANTED
                 ) {
