@@ -1,6 +1,11 @@
 package com.example.mdd_calender.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -21,6 +26,8 @@ import com.example.mdd_calender.ui.screens.DemoRoleEntryScreen
 import com.example.mdd_calender.ui.screens.TeacherMainScreen
 import com.example.mdd_calender.feature.teacher.TeacherWorkbenchViewModel
 import com.example.mdd_calender.domain.model.ActorRole
+import com.example.mdd_calender.domain.model.CareResult
+import kotlinx.coroutines.launch
 
 object Route {
     const val ENTRY = "entry"
@@ -55,6 +62,9 @@ fun AppNavigation(
         modifier = modifier
     ) {
         composable(Route.ENTRY) {
+            val scope = rememberCoroutineScope()
+            var preparing by remember { mutableStateOf(false) }
+            var preparationMessage by remember { mutableStateOf<String?>(null) }
             fun enter(role: ActorRole) {
                 val destination = when (landingForRole(role)) {
                     RoleLanding.STUDENT_SPACE -> Route.MAIN
@@ -63,9 +73,23 @@ fun AppNavigation(
                 }
                 navController.navigate(destination) { launchSingleTop = true }
             }
+            fun prepareAndEnter(role: ActorRole) {
+                if (preparing) return
+                scope.launch {
+                    preparing = true
+                    preparationMessage = null
+                    when (careServices?.prepareDemoScenario() ?: CareResult.Success(Unit)) {
+                        is CareResult.Success -> enter(role)
+                        is CareResult.Failure -> preparationMessage = "演示数据准备失败，请重试。"
+                    }
+                    preparing = false
+                }
+            }
             DemoRoleEntryScreen(
-                onStudentDemo = { enter(ActorRole.STUDENT) },
-                onTeacherDemo = { enter(ActorRole.TEACHER) },
+                onStudentDemo = { prepareAndEnter(ActorRole.STUDENT) },
+                onTeacherDemo = { prepareAndEnter(ActorRole.TEACHER) },
+                preparing = preparing,
+                preparationMessage = preparationMessage,
             )
         }
         composable(Route.MAIN) {

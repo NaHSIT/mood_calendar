@@ -137,6 +137,8 @@ adb shell am start -n com.example.mdd_calender/.MainActivity
 
 **2026-09-23 全功能完整性检查：** 修复拒绝定位后首页不可用的问题，将天气定位改为可选粗略定位；修正五个扩展名与内容格式不一致的启动图标，恢复干净 Release 构建。Debug、Android 测试 APK 和未签名 Release 均完成干净构建，66 项 JVM 测试通过，Lint 为 0 错误、52 警告；13 项 Android 仪器测试仅编译，按要求未执行真机测试。生产缺口见[全功能完整性检查报告](docs/testing/2026-09-23-全功能完整性检查报告.md)。
 
+**2026-09-23 演示数据初始化：** 两个演示入口会先幂等准备一套明确标注的虚构数据，包括近期心情、纪念日、模拟健康数据、量表、待确认预警和进行中的 AA 随访。重复进入不会不断新增记录；初始化失败会停留在入口并显示重试提示。真实身份接入时必须移除该演示初始化器。
+
 ```powershell
 # 本地单元测试、构建与静态检查
 .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug

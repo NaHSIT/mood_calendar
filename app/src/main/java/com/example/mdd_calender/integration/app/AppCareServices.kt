@@ -1,7 +1,9 @@
 package com.example.mdd_calender.integration.app
 
 import android.content.Context
+import com.example.mdd_calender.data.AnniversaryRecord
 import com.example.mdd_calender.data.MoodDatabase
+import com.example.mdd_calender.data.MoodRecord
 import com.example.mdd_calender.data.care.RoomAlertRepository
 import com.example.mdd_calender.data.care.RoomAssessmentRepository
 import com.example.mdd_calender.data.care.RoomAuditRepository
@@ -13,6 +15,9 @@ import com.example.mdd_calender.data.care.RoomInterventionRepository
 import com.example.mdd_calender.data.care.RoomStudentHealthRepository
 import com.example.mdd_calender.domain.model.ActorContext
 import com.example.mdd_calender.domain.model.ActorRole
+import com.example.mdd_calender.domain.model.AssessmentRecord
+import com.example.mdd_calender.domain.model.AssessmentState
+import com.example.mdd_calender.domain.model.AssessmentType
 import com.example.mdd_calender.domain.model.DataDomain
 import com.example.mdd_calender.domain.model.CareResult
 import com.example.mdd_calender.domain.model.ConsentState
@@ -27,6 +32,7 @@ import com.example.mdd_calender.domain.model.HealthPullRequest
 import com.example.mdd_calender.domain.model.HealthSampleType
 import com.example.mdd_calender.domain.model.HealthScope
 import com.example.mdd_calender.domain.model.RawHealthSample
+import com.example.mdd_calender.domain.model.SymptomBand
 import com.example.mdd_calender.domain.port.RiskEvaluationInput
 import com.example.mdd_calender.domain.port.SessionProvider
 import com.example.mdd_calender.feature.health.DemoHealthProvider
@@ -48,6 +54,9 @@ import com.example.mdd_calender.security.DemoSessionProvider
 import com.example.mdd_calender.domain.model.DeliveryStatus
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 /**
  * Single composition root for care features.
@@ -90,6 +99,7 @@ class AppCareServices(
     private val systemAlerts = RoomAlertRepository(database.careDao(), systemSession, cipher)
     private val administration = RoomCareAdministration(database.careDao(), systemSession, cipher)
     private val deliveryMutex = Mutex()
+    private val demoSeedMutex = Mutex()
     val teacherService = TeacherWorkbenchService(
         alerts = RoomAlertRepository(database.careDao(), teacherSession, cipher),
         interventions = RoomInterventionRepository(database, teacherSession, cipher),
@@ -100,6 +110,110 @@ class AppCareServices(
         deliveryDispatcher = { enqueueAndDeliver(it) },
     )
     val teacherFollowUp = RoomFollowUpRepository(database.careDao(), teacherSession, cipher)
+
+    /** Prepares fictional, clearly labelled and idempotent records for the two demo entrances. */
+    suspend fun prepareDemoScenario(): CareResult<Unit> = demoSeedMutex.withLock {
+        val now = System.currentTimeMillis()
+        val today = LocalDate.now()
+        val moods = listOf("开心", "平淡", "难过", "平淡", "开心", "惊喜")
+        val notes = listOf("完成了一件拖延很久的小事", "普通但平稳的一天", "学习压力有些大", "散步后感觉轻松了一些", "和朋友聊了很久", "收到了意外的好消息")
+        runCatching {
+            moods.indices.forEach { index ->
+                val offset = moods.lastIndex - index
+                database.moodDao().insertMoodRecord(
+                    MoodRecord(
+                        id = 910_001 + index,
+                        date = today.minusDays(offset.toLong()).toString(),
+                        time = LocalTime.of(20 - (index % 3), 10 + index).format(DateTimeFormatter.ofPattern("HH:mm")),
+                        moodType = moods[index],
+                        note = null,
+                        content = "演示记录：${notes[index]}。",
+                        imageUris = null,
+                        createdAt = now - offset * DAY_MILLIS,
+                        updatedAt = now - offset * DAY_MILLIS,
+                    ),
+                )
+            }
+            database.anniversaryDao().insertAnniversary(
+                AnniversaryRecord(
+                    id = 920_001,
+                    title = "演示：阶段复盘日",
+                    targetDate = today.plusDays(14).toString(),
+                    isCountdown = true,
+                    colorHex = "#6C63FF",
+                    createdAt = now,
+                ),
+            )
+        }.getOrElse {
+            return@withLock CareResult.Failure(com.example.mdd_calender.domain.model.CareFailure.TemporarilyUnavailable("Demo mood data could not be prepared"))
+        }
+
+        val consentSnapshot = when (val current = healthConsentSnapshot()) {
+            is CareResult.Failure -> return@withLock current
+            is CareResult.Success -> current.value
+        }
+        for (metric in HealthMetric.entries) {
+            if (metric !in consentSnapshot.enabledMetrics) {
+                when (val updated = updateHealthConsent(metric, true)) {
+                    is CareResult.Failure -> return@withLock updated
+                    is CareResult.Success -> Unit
+                }
+            }
+        }
+
+        val secondExists = assessments.getForCurrentStudent(DEMO_GAD_ID) is CareResult.Success
+        if (!secondExists) {
+            val first = demoAssessment(
+                id = DEMO_PHQ_ID,
+                type = AssessmentType.PHQ_9,
+                answers = listOf(2, 2, 1, 2, 1, 1, 1, 2, 0),
+                completedAt = now - 2 * MINUTE_MILLIS,
+                band = SymptomBand.MODERATE,
+            )
+            val firstReceipt = when (val submitted = submitAssessmentAndTriggerCare(first)) {
+                is CareResult.Failure -> return@withLock submitted
+                is CareResult.Success -> submitted.value
+            }
+            firstReceipt.alertId?.let { alertId ->
+                when (val started = teacherService.startIntervention("case:$alertId", "demo-teacher-follow-up-v1")) {
+                    is CareResult.Failure -> return@withLock started
+                    is CareResult.Success -> Unit
+                }
+            }
+
+            val second = demoAssessment(
+                id = DEMO_GAD_ID,
+                type = AssessmentType.GAD_7,
+                answers = listOf(2, 2, 2, 1, 1, 1, 1),
+                completedAt = now - MINUTE_MILLIS,
+                band = SymptomBand.MODERATE,
+            )
+            when (val submitted = submitAssessmentAndTriggerCare(second)) {
+                is CareResult.Failure -> return@withLock submitted
+                is CareResult.Success -> Unit
+            }
+        }
+        CareResult.Success(Unit)
+    }
+
+    private fun demoAssessment(
+        id: String,
+        type: AssessmentType,
+        answers: List<Int>,
+        completedAt: Long,
+        band: SymptomBand,
+    ) = AssessmentRecord(
+        assessmentId = id,
+        studentId = "demo-student",
+        type = type,
+        instrumentVersion = "demo-seed-v1",
+        answers = answers,
+        totalScore = answers.sum(),
+        symptomBand = band,
+        state = AssessmentState.COMPLETED,
+        completedAtEpochMillis = completedAt,
+        scoringVersion = "prototype-1",
+    )
 
     suspend fun submitAssessmentAndTriggerCare(record: com.example.mdd_calender.domain.model.AssessmentRecord): CareResult<CareChainReceipt> {
         when (val prepared = administration.upsertStudent(record.studentId, "DEMO-001")) {
@@ -348,6 +462,10 @@ class AppCareServices(
     }
 
     private companion object {
+        const val DAY_MILLIS = 24L * 60 * 60 * 1000
+        const val MINUTE_MILLIS = 60L * 1000
+        const val DEMO_PHQ_ID = "demo-seed-phq9-v1"
+        const val DEMO_GAD_ID = "demo-seed-gad7-v1"
         const val HEALTH_SIGNAL_WINDOW_MILLIS = 72L * 60 * 60 * 1000
     }
 }

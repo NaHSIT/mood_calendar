@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -46,6 +47,8 @@ import com.example.mdd_calender.feature.teacher.TeacherWorkbenchViewModel
 fun DemoRoleEntryScreen(
     onStudentDemo: () -> Unit,
     onTeacherDemo: () -> Unit,
+    preparing: Boolean = false,
+    preparationMessage: String? = null,
 ) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
@@ -64,13 +67,22 @@ fun DemoRoleEntryScreen(
                 description = "进入个人情绪日历、数据洞察、随访任务和隐私设置",
                 icon = { Icon(Icons.Outlined.Person, null) },
                 onClick = onStudentDemo,
+                enabled = !preparing,
             )
             RoleEntryCard(
                 title = "教师演示入口",
                 description = "使用已授权的演示教师身份进入脱敏预警工作台",
                 icon = { Icon(Icons.Outlined.School, null) },
                 onClick = onTeacherDemo,
+                enabled = !preparing,
             )
+            if (preparing) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    CircularProgressIndicator()
+                    Text("正在准备虚构演示数据…")
+                }
+            }
+            preparationMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Text("演示身份与真实数据域隔离，不代表已接入学校统一认证。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -82,9 +94,11 @@ private fun RoleEntryCard(
     description: String,
     icon: @Composable () -> Unit,
     onClick: () -> Unit,
+    enabled: Boolean,
 ) {
     Card(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
